@@ -4,13 +4,13 @@ from sqlalchemy.orm import Session
 from app.core.auth import get_current_active_user, require_permission
 from app.db.session import get_db
 from app.schemas.franchise import FranchiseCreate, FranchiseRead, FranchiseUpdate
+from app.services.audit import AuditService
 from app.services.franchise import FranchiseService
 from app.utils.enums import PermissionName
-from app.schemas.franchise import FranchiseCreate, FranchiseRead, FranchiseUpdate
-from app.services.franchise import FranchiseService
 
 router = APIRouter(prefix="/franchises", tags=["franchises"])
 service = FranchiseService()
+audit_service = AuditService()
 
 
 @router.get("/", response_model=list[FranchiseRead])
@@ -43,7 +43,16 @@ def create_franchise(
 ):
     if service.repo.get_by_name(db, data.name):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Franchise name already exists")
-    return service.create(db, data)
+    franchise = service.create(db, data)
+    audit_service.record(
+        db,
+        current_user,
+        action="create",
+        entity="Franchise",
+        entity_id=franchise.id,
+        details=f"Created franchise {franchise.name}",
+    )
+    return franchise
 
 
 @router.patch("/{franchise_id}", response_model=FranchiseRead)
@@ -56,7 +65,16 @@ def update_franchise(
     franchise = service.get(db, franchise_id)
     if franchise is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Franchise not found")
-    return service.update(db, franchise, data)
+    updated = service.update(db, franchise, data)
+    audit_service.record(
+        db,
+        current_user,
+        action="update",
+        entity="Franchise",
+        entity_id=updated.id,
+        details=f"Updated franchise {updated.name}",
+    )
+    return updated
 
 
 @router.delete("/{franchise_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -69,3 +87,11 @@ def delete_franchise(
     if franchise is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Franchise not found")
     service.delete(db, franchise)
+    audit_service.record(
+        db,
+        current_user,
+        action="delete",
+        entity="Franchise",
+        entity_id=franchise.id,
+        details=f"Deleted franchise {franchise.name}",
+    )

@@ -4,13 +4,13 @@ from sqlalchemy.orm import Session
 from app.core.auth import get_current_active_user, require_permission
 from app.db.session import get_db
 from app.schemas.publisher import PublisherCreate, PublisherRead, PublisherUpdate
+from app.services.audit import AuditService
 from app.services.publisher import PublisherService
 from app.utils.enums import PermissionName
-from app.schemas.publisher import PublisherCreate, PublisherRead, PublisherUpdate
-from app.services.publisher import PublisherService
 
 router = APIRouter(prefix="/publishers", tags=["publishers"])
 service = PublisherService()
+audit_service = AuditService()
 
 
 @router.get("/", response_model=list[PublisherRead])
@@ -43,7 +43,16 @@ def create_publisher(
 ):
     if service.repo.get_by_name(db, data.name):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Publisher name already exists")
-    return service.create(db, data)
+    publisher = service.create(db, data)
+    audit_service.record(
+        db,
+        current_user,
+        action="create",
+        entity="Publisher",
+        entity_id=publisher.id,
+        details=f"Created publisher {publisher.name}",
+    )
+    return publisher
 
 
 @router.patch("/{publisher_id}", response_model=PublisherRead)
@@ -56,7 +65,16 @@ def update_publisher(
     publisher = service.get(db, publisher_id)
     if publisher is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Publisher not found")
-    return service.update(db, publisher, data)
+    updated = service.update(db, publisher, data)
+    audit_service.record(
+        db,
+        current_user,
+        action="update",
+        entity="Publisher",
+        entity_id=updated.id,
+        details=f"Updated publisher {updated.name}",
+    )
+    return updated
 
 
 @router.delete("/{publisher_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -69,3 +87,11 @@ def delete_publisher(
     if publisher is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Publisher not found")
     service.delete(db, publisher)
+    audit_service.record(
+        db,
+        current_user,
+        action="delete",
+        entity="Publisher",
+        entity_id=publisher.id,
+        details=f"Deleted publisher {publisher.name}",
+    )

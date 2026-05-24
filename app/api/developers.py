@@ -4,13 +4,13 @@ from sqlalchemy.orm import Session
 from app.core.auth import get_current_active_user, require_permission
 from app.db.session import get_db
 from app.schemas.developer import DeveloperCreate, DeveloperRead, DeveloperUpdate
+from app.services.audit import AuditService
 from app.services.developer import DeveloperService
 from app.utils.enums import PermissionName
-from app.schemas.developer import DeveloperCreate, DeveloperRead, DeveloperUpdate
-from app.services.developer import DeveloperService
 
 router = APIRouter(prefix="/developers", tags=["developers"])
 service = DeveloperService()
+audit_service = AuditService()
 
 
 @router.get("/", response_model=list[DeveloperRead])
@@ -43,7 +43,16 @@ def create_developer(
 ):
     if service.repo.get_by_name(db, data.name):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Developer name already exists")
-    return service.create(db, data)
+    developer = service.create(db, data)
+    audit_service.record(
+        db,
+        current_user,
+        action="create",
+        entity="Developer",
+        entity_id=developer.id,
+        details=f"Created developer {developer.name}",
+    )
+    return developer
 
 
 @router.patch("/{developer_id}", response_model=DeveloperRead)
@@ -56,7 +65,16 @@ def update_developer(
     developer = service.get(db, developer_id)
     if developer is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Developer not found")
-    return service.update(db, developer, data)
+    updated = service.update(db, developer, data)
+    audit_service.record(
+        db,
+        current_user,
+        action="update",
+        entity="Developer",
+        entity_id=updated.id,
+        details=f"Updated developer {updated.name}",
+    )
+    return updated
 
 
 @router.delete("/{developer_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -69,3 +87,11 @@ def delete_developer(
     if developer is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Developer not found")
     service.delete(db, developer)
+    audit_service.record(
+        db,
+        current_user,
+        action="delete",
+        entity="Developer",
+        entity_id=developer.id,
+        details=f"Deleted developer {developer.name}",
+    )

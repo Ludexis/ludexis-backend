@@ -5,12 +5,12 @@ from app.core.auth import get_current_active_user, require_permission
 from app.db.session import get_db
 from app.schemas.archive_entry import ArchiveEntryCreate, ArchiveEntryRead, ArchiveEntryUpdate
 from app.services.archive_entry import ArchiveEntryService
+from app.services.audit import AuditService
 from app.utils.enums import PermissionName
-from app.schemas.archive_entry import ArchiveEntryCreate, ArchiveEntryRead, ArchiveEntryUpdate
-from app.services.archive_entry import ArchiveEntryService
 
 router = APIRouter(prefix="/archive-entries", tags=["archive_entries"])
 service = ArchiveEntryService()
+audit_service = AuditService()
 
 
 @router.get("/", response_model=list[ArchiveEntryRead])
@@ -42,7 +42,16 @@ def create_archive_entry(
     db: Session = Depends(get_db),
 ):
     try:
-        return service.create(db, data)
+        entry = service.create(db, data)
+        audit_service.record(
+            db,
+            current_user,
+            action="create",
+            entity="ArchiveEntry",
+            entity_id=entry.id,
+            details=f"Created archive entry {entry.title}",
+        )
+        return entry
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
 
@@ -58,7 +67,16 @@ def update_archive_entry(
     if entry is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Archive entry not found")
     try:
-        return service.update(db, entry, data)
+        updated = service.update(db, entry, data)
+        audit_service.record(
+            db,
+            current_user,
+            action="update",
+            entity="ArchiveEntry",
+            entity_id=updated.id,
+            details=f"Updated archive entry {updated.title}",
+        )
+        return updated
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
 
@@ -73,3 +91,11 @@ def delete_archive_entry(
     if entry is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Archive entry not found")
     service.delete(db, entry)
+    audit_service.record(
+        db,
+        current_user,
+        action="delete",
+        entity="ArchiveEntry",
+        entity_id=entry.id,
+        details=f"Deleted archive entry {entry.title}",
+    )

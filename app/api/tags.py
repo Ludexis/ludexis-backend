@@ -4,13 +4,13 @@ from sqlalchemy.orm import Session
 from app.core.auth import get_current_active_user, require_permission
 from app.db.session import get_db
 from app.schemas.tag import TagCreate, TagRead, TagUpdate
+from app.services.audit import AuditService
 from app.services.tag import TagService
 from app.utils.enums import PermissionName
-from app.schemas.tag import TagCreate, TagRead, TagUpdate
-from app.services.tag import TagService
 
 router = APIRouter(prefix="/tags", tags=["tags"])
 service = TagService()
+audit_service = AuditService()
 
 
 @router.get("/", response_model=list[TagRead])
@@ -43,7 +43,16 @@ def create_tag(
 ):
     if service.repo.get_by_name(db, data.name):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Tag name already exists")
-    return service.create(db, data)
+    tag = service.create(db, data)
+    audit_service.record(
+        db,
+        current_user,
+        action="create",
+        entity="Tag",
+        entity_id=tag.id,
+        details=f"Created tag {tag.name}",
+    )
+    return tag
 
 
 @router.patch("/{tag_id}", response_model=TagRead)
@@ -56,7 +65,16 @@ def update_tag(
     tag = service.get(db, tag_id)
     if tag is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Tag not found")
-    return service.update(db, tag, data)
+    updated = service.update(db, tag, data)
+    audit_service.record(
+        db,
+        current_user,
+        action="update",
+        entity="Tag",
+        entity_id=updated.id,
+        details=f"Updated tag {updated.name}",
+    )
+    return updated
 
 
 @router.delete("/{tag_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -69,3 +87,11 @@ def delete_tag(
     if tag is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Tag not found")
     service.delete(db, tag)
+    audit_service.record(
+        db,
+        current_user,
+        action="delete",
+        entity="Tag",
+        entity_id=tag.id,
+        details=f"Deleted tag {tag.name}",
+    )
