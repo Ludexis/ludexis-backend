@@ -8,6 +8,7 @@ from app.api.collections import router as collections_router
 from app.api.developers import router as developers_router
 from app.api.franchises import router as franchises_router
 from app.api.jobs import router as jobs_router
+from app.api.metadata import router as metadata_router
 from app.api.permissions import router as permissions_router
 from app.api.publishers import router as publishers_router
 from app.api.roles import router as roles_router
@@ -28,4 +29,5 @@ api_router.include_router(publishers_router)
 api_router.include_router(franchises_router)
 api_router.include_router(search_router)
 api_router.include_router(jobs_router)
+api_router.include_router(metadata_router)
 api_router.include_router(admin_router)
