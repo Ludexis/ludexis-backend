@@ -1,0 +1,61 @@
+from enum import Enum
+
+
+class MetadataStatus(str, Enum):
+    MATCHED = "MATCHED"
+    PARTIAL = "PARTIAL"
+    UNMATCHED = "UNMATCHED"
+    MANUAL = "MANUAL"
+
+
+class VerificationStatus(str, Enum):
+    VERIFIED = "VERIFIED"
+    MISSING = "MISSING"
+    MOVED = "MOVED"
+    CORRUPTED = "CORRUPTED"
+    UNKNOWN = "UNKNOWN"
+
+
+class RelationshipType(str, Enum):
+    FRANCHISE = "FRANCHISE"
+    SEQUEL = "SEQUEL"
+    PREQUEL = "PREQUEL"
+    SPINOFF = "SPINOFF"
+    COLLECTION = "COLLECTION"
+    EPISODE = "EPISODE"
+    REMASTER = "REMASTER"
+    RELATED = "RELATED"
+
+
+class JobType(str, Enum):
+    LIBRARY_SCAN = "LIBRARY_SCAN"
+    INCREMENTAL_SCAN = "INCREMENTAL_SCAN"
+    METADATA_REFRESH = "METADATA_REFRESH"
+    ARTWORK_REFRESH = "ARTWORK_REFRESH"
+    DUPLICATE_DETECTION = "DUPLICATE_DETECTION"
+    INTEGRITY_VERIFICATION = "INTEGRITY_VERIFICATION"
+
+
+class JobStatus(str, Enum):
+    PENDING = "PENDING"
+    RUNNING = "RUNNING"
+    SUCCESS = "SUCCESS"
+    FAILED = "FAILED"
+    CANCELED = "CANCELED"
+
+
+class PermissionName(str, Enum):
+    VIEW_LIBRARY = "VIEW_LIBRARY"
+    EDIT_METADATA = "EDIT_METADATA"
+    MANAGE_COLLECTIONS = "MANAGE_COLLECTIONS"
+    MANAGE_USERS = "MANAGE_USERS"
+    RUN_SCANS = "RUN_SCANS"
+    ACCESS_ADMIN = "ACCESS_ADMIN"
+    VIEW_AUDIT_LOGS = "VIEW_AUDIT_LOGS"
+
+
+class RoleName(str, Enum):
+    ADMINISTRATOR = "Administrator"
+    MODERATOR = "Moderator"
+    USER = "User"
+    READ_ONLY = "ReadOnly"

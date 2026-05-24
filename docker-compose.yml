@@ -1,0 +1,48 @@
+version: "3.9"
+
+services:
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: ludexis
+      POSTGRES_PASSWORD: ludexis
+      POSTGRES_DB: ludexis
+    volumes:
+      - db_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+
+  redis:
+    image: redis:7
+    ports:
+      - "6379:6379"
+
+  backend:
+    build: .
+    command: uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+    volumes:
+      - .:/usr/src/app
+    ports:
+      - "8000:8000"
+    environment:
+      - DATABASE_URL=postgresql+psycopg://ludexis:ludexis@db:5432/ludexis
+      - REDIS_URL=redis://redis:6379/0
+      - JWT_SECRET_KEY=supersecretjwtkey
+    depends_on:
+      - db
+      - redis
+
+  worker:
+    build: .
+    command: celery -A app.tasks.celery_app worker --loglevel=info
+    volumes:
+      - .:/usr/src/app
+    environment:
+      - DATABASE_URL=postgresql+psycopg://ludexis:ludexis@db:5432/ludexis
+      - REDIS_URL=redis://redis:6379/0
+    depends_on:
+      - db
+      - redis
+
+volumes:
+  db_data:
