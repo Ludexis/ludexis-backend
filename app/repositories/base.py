@@ -32,7 +32,10 @@ class BaseRepository(Generic[ModelType]):
         return instance
 
     def delete(self, db: Session, instance: ModelType) -> ModelType:
-        instance.deleted_at = sa.func.now()
-        db.add(instance)
+        if hasattr(instance, "deleted_at"):
+            instance.deleted_at = sa.func.now()
+            db.add(instance)
+        else:
+            db.delete(instance)
         db.commit()
         return instance

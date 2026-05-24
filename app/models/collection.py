@@ -21,3 +21,7 @@ class Collection(Base):
     deleted_at = mapped_column(sa.DateTime(timezone=True), nullable=True)
 
     archive_entries = relationship("ArchiveEntry", secondary=collection_entries, back_populates="collections")
+
+    @property
+    def entry_ids(self) -> list[str]:
+        return [entry.id for entry in self.archive_entries]

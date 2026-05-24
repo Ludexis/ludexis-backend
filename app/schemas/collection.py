@@ -12,7 +12,7 @@ class CollectionBase(BaseModel):
 
 
 class CollectionCreate(CollectionBase):
-    pass
+    entry_ids: list[str] = []
 
 
 class CollectionUpdate(BaseModel):
@@ -21,10 +21,16 @@ class CollectionUpdate(BaseModel):
     cover_path: str | None = None
     banner_path: str | None = None
     visibility: str | None = None
+    entry_ids: list[str] | None = None
+
+
+class CollectionEntryRequest(BaseModel):
+    entry_id: str
 
 
 class CollectionRead(CollectionBase, TimestampedModel):
     id: str
+    entry_ids: list[str] = []
 
     model_config = {
         "from_attributes": True,

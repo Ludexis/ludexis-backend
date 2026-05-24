@@ -8,6 +8,12 @@ class UserRepository(BaseRepository[User]):
     def __init__(self) -> None:
         super().__init__(User)
 
+    def get_active(self, db: Session, id: str) -> User | None:
+        return db.query(User).filter(User.id == id, User.deleted_at.is_(None)).one_or_none()
+
+    def list(self, db: Session, offset: int = 0, limit: int = 100) -> list[User]:
+        return db.query(User).filter(User.deleted_at.is_(None)).offset(offset).limit(limit).all()
+
     def get_by_email(self, db: Session, email: str) -> User | None:
         return db.query(User).filter(User.email == email, User.deleted_at.is_(None)).one_or_none()
 

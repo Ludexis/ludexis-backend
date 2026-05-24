@@ -10,13 +10,16 @@ class UserBase(BaseModel):
 
 class UserCreate(UserBase):
     password: str
+    role_ids: list[str] = []
 
 
 class UserUpdate(BaseModel):
     username: str | None = None
     email: EmailStr | None = None
+    password: str | None = None
     is_active: bool | None = None
     is_superuser: bool | None = None
+    role_ids: list[str] | None = None
 
 
 class UserRead(UserBase):
