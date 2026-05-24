@@ -15,8 +15,10 @@ class JobHistory(Base):
     status: JobStatus = mapped_column(sa.Enum(JobStatus, name="job_status"), nullable=False, default=JobStatus.PENDING)
     progress: int = mapped_column(sa.Integer, default=0, nullable=False)
     details: str = mapped_column(sa.Text, nullable=True)
+    result: str = mapped_column(sa.Text, nullable=True)
+    task_id: str = mapped_column(sa.String(255), nullable=True)
     started_at = mapped_column(sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False)
-    finished_at = mapped_column(sa.DateTime(timezone=True), nullable=True)
+    completed_at = mapped_column(sa.DateTime(timezone=True), nullable=True)
     user_id = mapped_column(sa.String(36), sa.ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
 
     user = relationship("User")

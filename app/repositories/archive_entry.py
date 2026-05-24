@@ -1,7 +1,5 @@
 import sqlalchemy as sa
 from sqlalchemy import select
-import sqlalchemy as sa
-from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.models.archive_entry import ArchiveEntry

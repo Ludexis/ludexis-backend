@@ -11,6 +11,8 @@ class Settings(BaseSettings):
 
     DATABASE_URL: PostgresDsn = "postgresql+psycopg://ludexis:ludexis@db:5432/ludexis"
     REDIS_URL: RedisDsn = "redis://redis:6379/0"
+    CELERY_BROKER_URL: RedisDsn = "redis://redis:6379/0"
+    CELERY_RESULT_BACKEND: RedisDsn = "redis://redis:6379/0"
 
     JWT_SECRET_KEY: str = "supersecretjwtkey"
     JWT_ALGORITHM: str = "HS256"
