@@ -13,6 +13,7 @@ class Settings(BaseSettings):
     REDIS_URL: RedisDsn = "redis://redis:6379/0"
     CELERY_BROKER_URL: RedisDsn = "redis://redis:6379/0"
     CELERY_RESULT_BACKEND: RedisDsn = "redis://redis:6379/0"
+    LIBRARY_SCAN_PATH: str = "./library"
 
     JWT_SECRET_KEY: str = "supersecretjwtkey"
     JWT_ALGORITHM: str = "HS256"

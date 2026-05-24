@@ -12,6 +12,7 @@ from app.api.metadata import router as metadata_router
 from app.api.permissions import router as permissions_router
 from app.api.publishers import router as publishers_router
 from app.api.roles import router as roles_router
+from app.api.scan import router as scan_router
 from app.api.search import router as search_router
 from app.api.tags import router as tags_router
 from app.api.users import router as users_router
@@ -29,5 +30,6 @@ api_router.include_router(publishers_router)
 api_router.include_router(franchises_router)
 api_router.include_router(search_router)
 api_router.include_router(jobs_router)
+api_router.include_router(scan_router)
 api_router.include_router(metadata_router)
 api_router.include_router(admin_router)

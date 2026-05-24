@@ -3,6 +3,7 @@ from datetime import datetime
 from app.models.user import User
 from app.repositories.job_history import JobHistoryRepository
 from app.tasks.celery_app import celery_app, run_job
+from app.tasks.scan_tasks import scan_full_task, scan_incremental_task
 from app.utils.enums import JobStatus, JobType
 from sqlalchemy.orm import Session
 
@@ -32,10 +33,17 @@ class JobService:
             "details": "Queued",
             "user_id": user.id if user else None,
         })
-        task = run_job.apply_async(args=[job.id])
+        task = self._select_task(job_type).apply_async(args=[job.id])
         job.task_id = task.id
         job.details = f"Queued task {task.id}"
         return self.repo.update(db, job, {"task_id": task.id, "details": job.details})
+
+    def _select_task(self, job_type: JobType):
+        if job_type == JobType.LIBRARY_SCAN:
+            return scan_full_task
+        if job_type == JobType.INCREMENTAL_SCAN:
+            return scan_incremental_task
+        return run_job
 
     def cancel_job(self, db: Session, job_id: str):
         job = self.repo.get(db, job_id)

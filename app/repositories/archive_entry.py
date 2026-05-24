@@ -28,6 +28,19 @@ class ArchiveEntryRepository(BaseRepository[ArchiveEntry]):
     def get_active(self, db: Session, id: str) -> ArchiveEntry | None:
         return db.query(ArchiveEntry).filter(ArchiveEntry.id == id, ArchiveEntry.deleted_at.is_(None)).one_or_none()
 
+    def get_by_file_path(self, db: Session, file_path: str) -> ArchiveEntry | None:
+        return db.query(ArchiveEntry).filter(ArchiveEntry.file_path == file_path, ArchiveEntry.deleted_at.is_(None)).one_or_none()
+
+    def get_by_title(self, db: Session, title: str) -> ArchiveEntry | None:
+        return db.query(ArchiveEntry).filter(sa.func.lower(ArchiveEntry.title) == title.lower(), ArchiveEntry.deleted_at.is_(None)).one_or_none()
+
+    def list_titles(self, db: Session) -> list[str]:
+        rows = db.query(ArchiveEntry.title).filter(ArchiveEntry.deleted_at.is_(None)).all()
+        return [row[0] for row in rows]
+
+    def list_all(self, db: Session) -> list[ArchiveEntry]:
+        return db.query(ArchiveEntry).all()
+
     def search(
         self,
         db: Session,
