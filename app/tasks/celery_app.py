@@ -72,5 +72,6 @@ def run_job(self, job_history_id: str) -> str:
         db.close()
 
 
-# Import scan task definitions to make them available to Celery workers.
+# Import scan and artwork task definitions to make them available to Celery workers.
 import app.tasks.scan_tasks  # noqa: F401
+import app.tasks.artwork_tasks  # noqa: F401

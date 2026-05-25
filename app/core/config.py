@@ -14,6 +14,15 @@ class Settings(BaseSettings):
     CELERY_BROKER_URL: RedisDsn = "redis://redis:6379/0"
     CELERY_RESULT_BACKEND: RedisDsn = "redis://redis:6379/0"
     LIBRARY_SCAN_PATH: str = "./library"
+    ARTWORK_STORAGE_PATH: str = "./artwork"
+    MAX_ARTWORK_SIZE_MB: int = 10
+    ALLOWED_ARTWORK_MIME_TYPES: list[str] = [
+        "image/jpeg",
+        "image/png",
+        "image/webp",
+        "image/gif",
+        "image/svg+xml",
+    ]
 
     JWT_SECRET_KEY: str = "supersecretjwtkey"
     JWT_ALGORITHM: str = "HS256"

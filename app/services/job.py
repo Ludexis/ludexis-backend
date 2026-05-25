@@ -4,6 +4,7 @@ from app.models.user import User
 from app.repositories.job_history import JobHistoryRepository
 from app.tasks.celery_app import celery_app, run_job
 from app.tasks.scan_tasks import scan_full_task, scan_incremental_task
+from app.tasks.artwork_tasks import validate_artwork_task
 from app.utils.enums import JobStatus, JobType
 from sqlalchemy.orm import Session
 
@@ -43,6 +44,8 @@ class JobService:
             return scan_full_task
         if job_type == JobType.INCREMENTAL_SCAN:
             return scan_incremental_task
+        if job_type == JobType.ARTWORK_REFRESH:
+            return validate_artwork_task
         return run_job
 
     def cancel_job(self, db: Session, job_id: str):

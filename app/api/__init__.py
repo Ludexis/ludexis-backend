@@ -4,6 +4,7 @@ from app.core.config import settings
 from app.api.admin import router as admin_router
 from app.api.archive_entries import router as archive_entries_router
 from app.api.auth import router as auth_router
+from app.api.artwork import router as artwork_router
 from app.api.collections import router as collections_router
 from app.api.developers import router as developers_router
 from app.api.franchises import router as franchises_router
@@ -30,6 +31,7 @@ api_router.include_router(publishers_router)
 api_router.include_router(franchises_router)
 api_router.include_router(search_router)
 api_router.include_router(jobs_router)
+api_router.include_router(artwork_router)
 api_router.include_router(scan_router)
 api_router.include_router(metadata_router)
 api_router.include_router(admin_router)
