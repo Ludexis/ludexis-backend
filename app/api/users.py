@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
-from app.core.auth import get_current_active_user, require_permission
+from app.core.auth import ensure_permission, get_current_active_user, get_optional_current_user, require_permission
 from app.core.security import hash_password
 from app.db.session import get_db
 from app.models.user import User
@@ -29,6 +29,18 @@ def _load_roles(db: Session, role_ids: list[str]) -> list:
     return roles
 
 
+def _require_manage_users_if_initialized(
+    db: Session = Depends(get_db),
+    current_user: User | None = Depends(get_optional_current_user),
+) -> User | None:
+    if not user_repo.has_any(db):
+        return None
+    if current_user is None:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Not authenticated")
+    ensure_permission(current_user, PermissionName.MANAGE_USERS)
+    return current_user
+
+
 @router.get("/", response_model=list[UserRead])
 def list_users(
     current_user: User = Depends(require_permission(PermissionName.MANAGE_USERS)),
@@ -42,9 +54,10 @@ def list_users(
 @router.post("/", response_model=UserRead, status_code=status.HTTP_201_CREATED)
 def create_user(
     data: UserCreate,
-    current_user: User = Depends(require_permission(PermissionName.MANAGE_USERS)),
+    current_user: User | None = Depends(_require_manage_users_if_initialized),
     db: Session = Depends(get_db),
 ):
+    initialized = user_repo.has_any(db)
     if user_repo.get_by_username(db, data.username):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -61,11 +74,11 @@ def create_user(
         "username": data.username,
         "email": data.email,
         "hashed_password": hashed_password,
-        "is_active": data.is_active,
-        "is_superuser": data.is_superuser,
+        "is_active": True if not initialized else data.is_active,
+        "is_superuser": True if not initialized else data.is_superuser,
     })
 
-    if data.role_ids:
+    if initialized and data.role_ids:
         user.roles = _load_roles(db, data.role_ids)
         db.add(user)
         db.commit()

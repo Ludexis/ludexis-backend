@@ -16,4 +16,7 @@ class MetadataSource(Base):
     created_at = mapped_column(sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False)
     updated_at = mapped_column(sa.DateTime(timezone=True), server_default=sa.func.now(), onupdate=sa.func.now(), nullable=False)
 
-    archive_entries = relationship("ArchiveEntry", back_populates="metadata_source")
+    archive_entries = relationship(
+    "ArchiveEntry",
+    back_populates="metadata_source_rel"
+    )

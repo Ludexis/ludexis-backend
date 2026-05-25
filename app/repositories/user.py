@@ -8,6 +8,9 @@ class UserRepository(BaseRepository[User]):
     def __init__(self) -> None:
         super().__init__(User)
 
+    def has_any(self, db: Session) -> bool:
+        return db.query(User.id).first() is not None
+
     def get_active(self, db: Session, id: str) -> User | None:
         return db.query(User).filter(User.id == id, User.deleted_at.is_(None)).one_or_none()
 
