@@ -8,6 +8,7 @@ from app.db.base import Base
 
 class Genre(Base):
     __tablename__ = "genres"
+    __allow_unmapped__ = True
 
     id: str = mapped_column(sa.String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     name: str = mapped_column(sa.String(128), unique=True, nullable=False)

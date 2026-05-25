@@ -25,4 +25,4 @@ class AuditService:
         })
 
     def list_logs(self, db: Session, user_id: str | None = None, entity: str | None = None, action: str | None = None, offset: int = 0, limit: int = 100):
-        return self.repo.list(db, user_id=user_id, entity=entity, action=action, offset=offset, limit=limit)
+        return self.repo.list_items(db, user_id=user_id, entity=entity, action=action, offset=offset, limit=limit)

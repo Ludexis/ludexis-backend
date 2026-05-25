@@ -8,7 +8,7 @@ class JobHistoryRepository(BaseRepository[JobHistory]):
     def __init__(self) -> None:
         super().__init__(JobHistory)
 
-    def list(self, db: Session, job_type: str | None = None, status: str | None = None, offset: int = 0, limit: int = 100) -> list[JobHistory]:
+    def list_items(self, db: Session, job_type: str | None = None, status: str | None = None, offset: int = 0, limit: int = 100) -> list[JobHistory]:
         query = db.query(JobHistory)
         if job_type is not None:
             query = query.filter(JobHistory.job_type == job_type)

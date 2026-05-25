@@ -9,8 +9,8 @@ class TagService:
     def __init__(self) -> None:
         self.repo = TagRepository()
 
-    def list(self, db: Session, offset: int = 0, limit: int = 100) -> list[Tag]:
-        return self.repo.list(db, offset=offset, limit=limit)
+    def list_items(self, db: Session, offset: int = 0, limit: int = 100) -> list[Tag]:
+        return self.repo.list_items(db, offset=offset, limit=limit)
 
     def get(self, db: Session, tag_id: str) -> Tag | None:
         return self.repo.get(db, tag_id)

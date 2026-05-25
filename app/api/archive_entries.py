@@ -20,7 +20,7 @@ def list_archive_entries(
     offset: int = 0,
     limit: int = 100,
 ):
-    return service.list(db, offset=offset, limit=limit)
+    return service.list_entries(db, offset=offset, limit=limit)
 
 
 @router.get("/{archive_entry_id}", response_model=ArchiveEntryRead)

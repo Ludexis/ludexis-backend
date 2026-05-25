@@ -9,6 +9,7 @@ from app.utils.enums import JobStatus, JobType
 
 class JobHistory(Base):
     __tablename__ = "job_history"
+    __allow_unmapped__ = True
 
     id: str = mapped_column(sa.String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     job_type: JobType = mapped_column(sa.Enum(JobType, name="job_type"), nullable=False)

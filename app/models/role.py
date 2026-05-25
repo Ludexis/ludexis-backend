@@ -9,6 +9,7 @@ from app.models.association_tables import role_permissions
 
 class Role(Base):
     __tablename__ = "roles"
+    __allow_unmapped__ = True
 
     id: str = mapped_column(sa.String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     name: str = mapped_column(sa.String(64), unique=True, nullable=False)

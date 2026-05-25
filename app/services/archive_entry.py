@@ -19,7 +19,7 @@ class ArchiveEntryService:
         self.collection_repo = CollectionRepository()
         self.franchise_repo = FranchiseRepository()
 
-    def list(self, db: Session, offset: int = 0, limit: int = 100) -> list[ArchiveEntry]:
+    def list_entries(self, db: Session, offset: int = 0, limit: int = 100) -> list[ArchiveEntry]:
         return self.repo.list_active(db, offset=offset, limit=limit)
 
     def get(self, db: Session, entry_id: str) -> ArchiveEntry | None:

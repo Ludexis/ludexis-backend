@@ -16,7 +16,7 @@ def list_permissions(
     current_user=Depends(require_permission(PermissionName.MANAGE_USERS)),
     db: Session = Depends(get_db),
 ):
-    return permission_repo.list(db)
+    return permission_repo.list_items(db)
 
 
 @router.post("/", response_model=PermissionRead, status_code=status.HTTP_201_CREATED)

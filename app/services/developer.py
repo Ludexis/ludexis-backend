@@ -9,8 +9,8 @@ class DeveloperService:
     def __init__(self) -> None:
         self.repo = DeveloperRepository()
 
-    def list(self, db: Session, offset: int = 0, limit: int = 100) -> list[Developer]:
-        return self.repo.list(db, offset=offset, limit=limit)
+    def list_items(self, db: Session, offset: int = 0, limit: int = 100) -> list[Developer]:
+        return self.repo.list_items(db, offset=offset, limit=limit)
 
     def get(self, db: Session, developer_id: str) -> Developer | None:
         return self.repo.get(db, developer_id)

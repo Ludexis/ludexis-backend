@@ -1,10 +1,14 @@
 from pathlib import Path
 from typing import List
 
-from pydantic import BaseSettings, PostgresDsn, RedisDsn, field_validator
-
+from pydantic import PostgresDsn, RedisDsn, field_validator
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 class Settings(BaseSettings):
+    model_config = SettingsConfigDict(
+    env_file=".env",
+    env_file_encoding="utf-8",
+    )
     PROJECT_NAME: str = "Ludexis Backend"
     DEBUG: bool = False
     API_PREFIX: str = "/api"
@@ -30,10 +34,6 @@ class Settings(BaseSettings):
     REFRESH_TOKEN_EXPIRE_DAYS: int = 30
 
     CORS_ORIGINS: List[str] = ["*"]
-
-    class Config:
-        env_file = Path(__file__).resolve().parents[1] / ".env"
-        env_file_encoding = "utf-8"
 
     @field_validator("CORS_ORIGINS", mode="before")
     def assemble_cors_origins(cls, value):

@@ -8,6 +8,7 @@ from app.db.base import Base
 
 class Developer(Base):
     __tablename__ = "developers"
+    __allow_unmapped__ = True
 
     id: str = mapped_column(sa.String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     name: str = mapped_column(sa.String(256), unique=True, nullable=False)

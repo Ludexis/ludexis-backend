@@ -20,7 +20,7 @@ class BaseRepository(Generic[ModelType]):
     def get(self, db: Session, id: str) -> ModelType | None:
         return db.get(self.model, id)
 
-    def list(self, db: Session, offset: int = 0, limit: int = 100) -> list[ModelType]:
+    def list_items(self, db: Session, offset: int = 0, limit: int = 100) -> list[ModelType]:
         return db.query(self.model).offset(offset).limit(limit).all()
 
     def update(self, db: Session, instance: ModelType, obj_in: dict[any, any]) -> ModelType:

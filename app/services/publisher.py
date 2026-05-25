@@ -9,8 +9,8 @@ class PublisherService:
     def __init__(self) -> None:
         self.repo = PublisherRepository()
 
-    def list(self, db: Session, offset: int = 0, limit: int = 100) -> list[Publisher]:
-        return self.repo.list(db, offset=offset, limit=limit)
+    def list_items(self, db: Session, offset: int = 0, limit: int = 100) -> list[Publisher]:
+        return self.repo.list_items(db, offset=offset, limit=limit)
 
     def get(self, db: Session, publisher_id: str) -> Publisher | None:
         return self.repo.get(db, publisher_id)

@@ -8,6 +8,7 @@ from app.db.base import Base
 
 class AuditLog(Base):
     __tablename__ = "audit_logs"
+    __allow_unmapped__ = True
 
     id: str = mapped_column(sa.String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     user_id = mapped_column(sa.String(36), sa.ForeignKey("users.id", ondelete="SET NULL"), nullable=True)

@@ -36,7 +36,7 @@ def read_scan_status(
     current_user=Depends(get_current_active_user),
     db: Session = Depends(get_db),
 ):
-    jobs = job_repo.list(db)
+    jobs = job_repo.list_items(db)
     scan_jobs = [job for job in jobs if job.job_type in {JobType.LIBRARY_SCAN, JobType.INCREMENTAL_SCAN}]
     counts = {
         "pending": sum(1 for job in scan_jobs if job.status == JobStatus.PENDING),

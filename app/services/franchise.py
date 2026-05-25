@@ -9,8 +9,8 @@ class FranchiseService:
     def __init__(self) -> None:
         self.repo = FranchiseRepository()
 
-    def list(self, db: Session, offset: int = 0, limit: int = 100) -> list[Franchise]:
-        return self.repo.list(db, offset=offset, limit=limit)
+    def list_items(self, db: Session, offset: int = 0, limit: int = 100) -> list[Franchise]:
+        return self.repo.list_items(db, offset=offset, limit=limit)
 
     def get(self, db: Session, franchise_id: str) -> Franchise | None:
         return self.repo.get(db, franchise_id)

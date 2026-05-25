@@ -18,6 +18,7 @@ from app.utils.enums import MetadataStatus, VerificationStatus
 
 class ArchiveEntry(Base):
     __tablename__ = "archive_entries"
+    __allow_unmapped__ = True
 
     id: str = mapped_column(sa.String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     title: str = mapped_column(sa.String(256), nullable=False)

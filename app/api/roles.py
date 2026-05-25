@@ -32,7 +32,7 @@ def list_roles(
     current_user=Depends(require_permission(PermissionName.MANAGE_USERS)),
     db: Session = Depends(get_db),
 ):
-    return role_repo.list(db)
+    return role_repo.list_items(db)
 
 
 @router.post("/", response_model=RoleRead, status_code=status.HTTP_201_CREATED)

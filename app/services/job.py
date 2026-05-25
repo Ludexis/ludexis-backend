@@ -21,7 +21,7 @@ class JobService:
         offset: int = 0,
         limit: int = 100,
     ):
-        return self.repo.list(db, job_type=job_type, status=status, offset=offset, limit=limit)
+        return self.repo.list_items(db, job_type=job_type, status=status, offset=offset, limit=limit)
 
     def get_job(self, db: Session, job_id: str):
         return self.repo.get(db, job_id)

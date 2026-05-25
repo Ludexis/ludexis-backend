@@ -9,6 +9,7 @@ from app.models.association_tables import user_roles
 
 class User(Base):
     __tablename__ = "users"
+    __allow_unmapped__ = True
 
     id: str = mapped_column(sa.String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     username: str = mapped_column(sa.String(128), unique=True, nullable=False)

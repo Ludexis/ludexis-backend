@@ -36,7 +36,7 @@ def list_users(
     skip: int = 0,
     limit: int = 100,
 ):
-    return user_repo.list(db, offset=skip, limit=limit)
+    return user_repo.list_items(db, offset=skip, limit=limit)
 
 
 @router.post("/", response_model=UserRead, status_code=status.HTTP_201_CREATED)

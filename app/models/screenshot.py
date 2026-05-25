@@ -8,6 +8,7 @@ from app.db.base import Base
 
 class Screenshot(Base):
     __tablename__ = "screenshots"
+    __allow_unmapped__ = True
 
     id: str = mapped_column(sa.String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     archive_entry_id = mapped_column(sa.String(36), sa.ForeignKey("archive_entries.id", ondelete="CASCADE"), nullable=False)

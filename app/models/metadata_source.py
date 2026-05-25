@@ -8,6 +8,7 @@ from app.db.base import Base
 
 class MetadataSource(Base):
     __tablename__ = "metadata_sources"
+    __allow_unmapped__ = True
 
     id: str = mapped_column(sa.String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     provider_name: str = mapped_column(sa.String(128), unique=True, nullable=False)

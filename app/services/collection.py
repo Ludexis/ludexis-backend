@@ -12,7 +12,7 @@ class CollectionService:
         self.repo = CollectionRepository()
         self.entry_repo = ArchiveEntryRepository()
 
-    def list(self, db: Session, offset: int = 0, limit: int = 100) -> list[Collection]:
+    def list_items(self, db: Session, offset: int = 0, limit: int = 100) -> list[Collection]:
         return self.repo.list_active(db, offset=offset, limit=limit)
 
     def get(self, db: Session, collection_id: str) -> Collection | None:

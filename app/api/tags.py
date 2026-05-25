@@ -20,7 +20,7 @@ def list_tags(
     offset: int = 0,
     limit: int = 100,
 ):
-    return service.list(db, offset=offset, limit=limit)
+    return service.list_items(db, offset=offset, limit=limit)
 
 
 @router.get("/{tag_id}", response_model=TagRead)

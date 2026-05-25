@@ -10,7 +10,7 @@ class ArtworkType(str, Enum):
     SCREENSHOT = "screenshot"
 
     @classmethod
-    def list(cls) -> list[str]:
+    def list_values(cls) -> list[str]:
         return [member.value for member in cls]
 
 
