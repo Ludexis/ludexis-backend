@@ -14,9 +14,9 @@ class Settings(BaseSettings):
     API_PREFIX: str = "/api"
 
     DATABASE_URL: PostgresDsn = "postgresql+psycopg://ludexis:ludexis@db:5432/ludexis"
-    REDIS_URL: RedisDsn = "redis://redis:6379/0"
-    CELERY_BROKER_URL: RedisDsn = "redis://redis:6379/0"
-    CELERY_RESULT_BACKEND: RedisDsn = "redis://redis:6379/0"
+    REDIS_URL: RedisDsn = "redis://localhost:6379/0"
+    CELERY_BROKER_URL: RedisDsn = "redis://localhost:6379/0"
+    CELERY_RESULT_BACKEND: RedisDsn = "redis://localhost:6379/0"
     LIBRARY_SCAN_PATH: str = "./library"
     ARTWORK_STORAGE_PATH: str = "./artwork"
     MAX_ARTWORK_SIZE_MB: int = 10

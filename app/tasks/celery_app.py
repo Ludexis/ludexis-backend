@@ -12,8 +12,8 @@ from app.utils.enums import JobStatus
 
 celery_app = Celery(
     "ludexis",
-    broker=settings.CELERY_BROKER_URL,
-    backend=settings.CELERY_RESULT_BACKEND,
+    broker=str(settings.CELERY_BROKER_URL),
+    backend=str(settings.CELERY_RESULT_BACKEND),
 )
 celery_app.conf.update(
     task_serializer="json",
