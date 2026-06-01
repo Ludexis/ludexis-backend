@@ -34,6 +34,26 @@ class ArchiveEntryRepository(BaseRepository[ArchiveEntry]):
     def get_by_title(self, db: Session, title: str) -> ArchiveEntry | None:
         return db.query(ArchiveEntry).filter(sa.func.lower(ArchiveEntry.title) == title.lower(), ArchiveEntry.deleted_at.is_(None)).one_or_none()
 
+    def get_by_title_and_version(
+        self,
+        db: Session,
+        title: str,
+        version: str | None,
+    ) -> ArchiveEntry | None:
+        query = (
+            db.query(ArchiveEntry)
+            .filter(
+                sa.func.lower(ArchiveEntry.title) == title.lower(),
+                ArchiveEntry.deleted_at.is_(None),
+            )
+        )
+        if version is None:
+            query = query.filter(ArchiveEntry.version.is_(None))
+        else:
+            query = query.filter(ArchiveEntry.version == version)
+        return query.one_or_none()
+
+
     def list_titles(self, db: Session) -> list[str]:
         rows = db.query(ArchiveEntry.title).filter(ArchiveEntry.deleted_at.is_(None)).all()
         return [row[0] for row in rows]

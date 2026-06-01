@@ -7,7 +7,7 @@ from app.models.archive_entry import ArchiveEntry
 from app.repositories.archive_entry import ArchiveEntryRepository
 from app.services.matching import MatchingService
 from app.utils.enums import MetadataStatus, VerificationStatus
-from app.utils.normalization import normalize_archive_name
+from app.utils.normalization import parse_archive_name
 from sqlalchemy.orm import Session
 
 
@@ -21,8 +21,10 @@ class ArchiveScanItem:
     filename: str
     archive_name: str | None
     folder_name: str | None
+    title: str
+    version: str | None
     archive_type: str
-    normalized_title: str
+    release_group: str | None = None
 
 
 class ScannerService:
@@ -54,23 +56,37 @@ class ScannerService:
         return items
 
     def _scan_file(self, path: Path) -> ArchiveScanItem:
+        parsed = parse_archive_name(path.name)
+
         return ArchiveScanItem(
             file_path=str(path.resolve()),
             filename=path.name,
             archive_name=path.stem,
             folder_name=path.parent.name if path.parent != path else None,
-            archive_type=path.suffix.lstrip(".").upper(),
-            normalized_title=normalize_archive_name(path.stem),
+
+            title=parsed.title,
+            version=parsed.version,
+
+            archive_type=parsed.archive_type or path.suffix.lstrip(".").upper(),
+
+            release_group=parsed.release_group,
         )
 
     def _scan_folder(self, path: Path) -> ArchiveScanItem:
+        parsed = parse_archive_name(path.name)
+
         return ArchiveScanItem(
             file_path=str(path.resolve()),
             filename=path.name,
             archive_name=None,
             folder_name=path.name,
+
+            title=parsed.title,
+            version=parsed.version,
+
             archive_type=SUPPORTED_FOLDER_TYPE,
-            normalized_title=normalize_archive_name(path.name),
+
+            release_group=parsed.release_group,
         )
 
     def _process_items(self, db: Session, items: Iterable[ArchiveScanItem]) -> dict[str, int]:
@@ -78,13 +94,22 @@ class ScannerService:
         for item in items:
             if self.repo.get_by_file_path(db, item.file_path):
                 continue
+            existing = self.repo.get_by_title_and_version(
+            db,
+            item.title,
+            item.version,
+            )
 
-            match_type, confidence = self.matcher.match_title(db, item.normalized_title)
+            if existing:
+                stats["matched"] += 1
+                continue
+
+            match_type, confidence = self.matcher.match_title(db, item.title, item.version,)
             metadata_status = self.matcher.metadata_status_for_match(match_type)
             archive_entry = self.repo.create(db, {
-                "title": item.normalized_title,
+                "title": item.title,
                 "description": None,
-                "version": None,
+                "version": item.version,
                 "engine": None,
                 "release_date": None,
                 "archive_type": item.archive_type,
