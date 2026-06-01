@@ -1,6 +1,6 @@
 from datetime import date
 
-from pydantic import BaseModel
+from pydantic import BaseModel, computed_field
 
 from app.schemas.base import TimestampedModel
 from app.schemas.collection import CollectionRead
@@ -40,15 +40,14 @@ class ArchiveEntryBase(BaseModel):
     verification_status: VerificationStatus = VerificationStatus.UNKNOWN
     parent_series_id: str | None = None
     franchise_id: str | None = None
-    tag_ids: list[str] = []
-    developer_ids: list[str] = []
-    publisher_ids: list[str] = []
-    collection_ids: list[str] = []
     related_entry_ids: list[str] = []
 
 
 class ArchiveEntryCreate(ArchiveEntryBase):
-    pass
+    tag_ids: list[str] = []
+    developer_ids: list[str] = []
+    publisher_ids: list[str] = []
+    collection_ids: list[str] = []
 
 
 class ArchiveEntryUpdate(BaseModel):
@@ -80,13 +79,38 @@ class ArchiveEntryUpdate(BaseModel):
 
 class ArchiveEntryRead(ArchiveEntryBase, TimestampedModel):
     id: str
+
     tags: list[TagRead] = []
     developers: list[DeveloperRead] = []
     publishers: list[PublisherRead] = []
     collections: list[CollectionRead] = []
+
     franchise: FranchiseRead | None = None
     parent_series: ArchiveEntryReference | None = None
     related_entries: list[ArchiveEntryReference] = []
+
+    @computed_field
+    @property
+    def tag_ids(self) -> list[str]:
+        return [tag.id for tag in self.tags]
+
+
+    @computed_field
+    @property
+    def developer_ids(self) -> list[str]:
+        return [dev.id for dev in self.developers]
+
+
+    @computed_field
+    @property
+    def publisher_ids(self) -> list[str]:
+        return [pub.id for pub in self.publishers]
+
+
+    @computed_field
+    @property
+    def collection_ids(self) -> list[str]:
+        return [col.id for col in self.collections]
 
     model_config = {
         "from_attributes": True,
