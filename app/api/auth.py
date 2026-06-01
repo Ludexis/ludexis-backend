@@ -8,6 +8,8 @@ from app.schemas.auth import LoginRequest, Token, RefreshRequest, LogoutRequest
 from app.schemas.user import UserRead
 from app.services.auth import AuthService
 
+from fastapi.security import OAuth2PasswordRequestForm
+
 router = APIRouter(prefix="/auth", tags=["auth"])
 auth_service = AuthService()
 
@@ -53,3 +55,34 @@ def logout(data: LogoutRequest, db: Session = Depends(get_db)):
 @router.get("/me", response_model=UserRead)
 def read_current_user(current_user: UserRead = Depends(get_current_user)):
     return current_user
+
+@router.post("/token", response_model=Token)
+def token_login(
+    form_data: OAuth2PasswordRequestForm = Depends(),
+    db: Session = Depends(get_db),
+):
+    user = auth_service.authenticate(
+        db,
+        form_data.username,
+        form_data.password,
+    )
+
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid username or password",
+        )
+
+    if not user.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Inactive user",
+        )
+
+    tokens = auth_service.create_tokens(db, user)
+
+    return {
+        "access_token": tokens["access_token"],
+        "refresh_token": tokens["refresh_token"],
+        "token_type": "bearer",
+    }
