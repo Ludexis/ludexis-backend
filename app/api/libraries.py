@@ -4,13 +4,14 @@ from sqlalchemy.orm import Session
 from app.core.auth import get_current_active_user, require_permission
 from app.db.session import get_db
 from app.schemas.library import LibraryCreate, LibraryRead, LibraryUpdate
-from app.services.audit import AuditService
+from app.services.audit_log import AuditLogService
 from app.services.library import LibraryService
+from app.utils.audit_actions import AuditAction
 from app.utils.enums import PermissionName
 
 router = APIRouter(prefix="/libraries", tags=["libraries"])
 service = LibraryService()
-audit_service = AuditService()
+audit_log_service = AuditLogService()
 
 
 @router.get("/", response_model=list[LibraryRead])
@@ -43,13 +44,13 @@ def create_library(
 ):
     try:
         library = service.create(db, data)
-        audit_service.record(
+        audit_log_service.log(
             db,
-            current_user,
-            action="create",
+            action=AuditAction.CREATE_LIBRARY,
             entity="Library",
             entity_id=library.id,
-            details=f"Created library {library.name}",
+            user_id=current_user.id,
+            details=f"Created library '{library.name}'",
         )
         return library
     except ValueError as exc:
@@ -68,13 +69,13 @@ def update_library(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Library not found")
     try:
         updated = service.update(db, library, data)
-        audit_service.record(
+        audit_log_service.log(
             db,
-            current_user,
-            action="update",
+            action=AuditAction.UPDATE_LIBRARY,
             entity="Library",
             entity_id=updated.id,
-            details=f"Updated library {updated.name}",
+            user_id=current_user.id,
+            details=f"Updated library '{updated.name}'",
         )
         return updated
     except ValueError as exc:
@@ -91,11 +92,11 @@ def delete_library(
     if library is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Library not found")
     service.delete(db, library)
-    audit_service.record(
+    audit_log_service.log(
         db,
-        current_user,
-        action="delete",
+        action=AuditAction.DELETE_LIBRARY,
         entity="Library",
         entity_id=library.id,
-        details=f"Deleted library {library.name}",
+        user_id=current_user.id,
+        details=f"Deleted library '{library.name}'",
     )

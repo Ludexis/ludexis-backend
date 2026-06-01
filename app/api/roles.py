@@ -7,11 +7,14 @@ from app.repositories.permission import PermissionRepository
 from app.repositories.role import RoleRepository
 from app.schemas.permission import PermissionRead
 from app.schemas.role import RoleCreate, RoleRead, RoleUpdate
+from app.services.audit_log import AuditLogService
+from app.utils.audit_actions import AuditAction
 from app.utils.enums import PermissionName
 
 router = APIRouter(prefix="/roles", tags=["roles"])
 role_repo = RoleRepository()
 permission_repo = PermissionRepository()
+audit_log_service = AuditLogService()
 
 
 def _load_permissions(db: Session, permission_ids: list[str]) -> list:
@@ -47,6 +50,14 @@ def create_role(
         db.add(role)
         db.commit()
         db.refresh(role)
+    audit_log_service.log(
+        db,
+        action=AuditAction.CREATE_ROLE,
+        entity="Role",
+        entity_id=role.id,
+        user_id=current_user.id,
+        details=f"Created role '{role.name}'",
+    )
     return role
 
 
@@ -85,6 +96,14 @@ def update_role(
     db.add(role)
     db.commit()
     db.refresh(role)
+    audit_log_service.log(
+        db,
+        action=AuditAction.UPDATE_ROLE,
+        entity="Role",
+        entity_id=role.id,
+        user_id=current_user.id,
+        details=f"Updated role '{role.name}'",
+    )
     return role
 
 
@@ -98,3 +117,11 @@ def delete_role(
     if role is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Role not found")
     role_repo.delete(db, role)
+    audit_log_service.log(
+        db,
+        action=AuditAction.DELETE_ROLE,
+        entity="Role",
+        entity_id=role.id,
+        user_id=current_user.id,
+        details=f"Deleted role '{role.name}'",
+    )

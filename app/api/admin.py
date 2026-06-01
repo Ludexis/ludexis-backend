@@ -3,6 +3,7 @@ from sqlalchemy.orm import Session
 
 from app.core.auth import get_current_active_user, require_permission
 from app.db.session import get_db
+from app.repositories.role import RoleRepository
 from app.schemas.admin import AdminStats
 from app.schemas.audit_log import AuditLogRead
 from app.services.admin import AdminService
@@ -12,6 +13,7 @@ from app.utils.enums import PermissionName
 router = APIRouter(prefix="/admin", tags=["admin"])
 admin_service = AdminService()
 audit_service = AuditService()
+role_repo = RoleRepository()
 
 
 @router.get("/audit-logs", response_model=list[AuditLogRead])
@@ -33,3 +35,12 @@ def read_admin_stats(
     db: Session = Depends(get_db),
 ):
     return admin_service.get_stats(db)
+
+
+@router.get("/permission-report")
+def read_permission_report(
+    current_user=Depends(require_permission(PermissionName.ACCESS_ADMIN)),
+    db: Session = Depends(get_db),
+):
+    roles = role_repo.list_items(db)
+    return {role.name: [permission.name for permission in role.permissions] for role in roles}

@@ -9,11 +9,14 @@ from app.repositories.role import RoleRepository
 from app.repositories.user import UserRepository
 from app.schemas.auth import PasswordResetRequest
 from app.schemas.user import UserCreate, UserRead, UserUpdate
+from app.services.audit_log import AuditLogService
+from app.utils.audit_actions import AuditAction
 from app.utils.enums import PermissionName
 
 router = APIRouter(prefix="/users", tags=["users"])
 user_repo = UserRepository()
 role_repo = RoleRepository()
+audit_log_service = AuditLogService()
 
 
 def _load_roles(db: Session, role_ids: list[str]) -> list:
@@ -84,6 +87,26 @@ def create_user(
         db.commit()
         db.refresh(user)
 
+    audit_log_service.log(
+        db,
+        action=AuditAction.CREATE_USER,
+        entity="User",
+        entity_id=user.id,
+        user_id=current_user.id if current_user else None,
+        details=f"Created user '{user.username}'",
+    )
+
+    if initialized and data.role_ids:
+        for role in user.roles:
+            audit_log_service.log(
+                db,
+                action=AuditAction.ASSIGN_ROLE,
+                entity="User",
+                entity_id=user.id,
+                user_id=current_user.id if current_user else None,
+                details=f"Assigned role '{role.name}' to user '{user.username}'",
+            )
+
     return user
 
 
@@ -114,6 +137,10 @@ def update_user(
     db: Session = Depends(get_db),
 ):
     user = _get_user_or_404(db, user_id)
+    old_roles = list(user.roles)
+    old_role_ids = {role.id for role in old_roles}
+    assigned_roles: list = []
+    removed_roles: list = []
 
     if data.username is not None:
         if user.username != data.username and user_repo.get_by_username(db, data.username):
@@ -141,11 +168,41 @@ def update_user(
         user.is_superuser = data.is_superuser
 
     if data.role_ids is not None:
-        user.roles = _load_roles(db, data.role_ids)
+        new_roles = _load_roles(db, data.role_ids)
+        new_role_ids = {role.id for role in new_roles}
+        assigned_roles = [role for role in new_roles if role.id not in old_role_ids]
+        removed_roles = [role for role in old_roles if role.id not in new_role_ids]
+        user.roles = new_roles
 
     db.add(user)
     db.commit()
     db.refresh(user)
+    audit_log_service.log(
+        db,
+        action=AuditAction.UPDATE_USER,
+        entity="User",
+        entity_id=user.id,
+        user_id=current_user.id,
+        details=f"Updated user '{user.username}'",
+    )
+    for role in assigned_roles:
+        audit_log_service.log(
+            db,
+            action=AuditAction.ASSIGN_ROLE,
+            entity="User",
+            entity_id=user.id,
+            user_id=current_user.id,
+            details=f"Assigned role '{role.name}' to user '{user.username}'",
+        )
+    for role in removed_roles:
+        audit_log_service.log(
+            db,
+            action=AuditAction.REMOVE_ROLE,
+            entity="User",
+            entity_id=user.id,
+            user_id=current_user.id,
+            details=f"Removed role '{role.name}' from user '{user.username}'",
+        )
     return user
 
 
@@ -157,6 +214,14 @@ def delete_user(
 ):
     user = _get_user_or_404(db, user_id)
     user_repo.delete(db, user)
+    audit_log_service.log(
+        db,
+        action=AuditAction.DELETE_USER,
+        entity="User",
+        entity_id=user.id,
+        user_id=current_user.id,
+        details=f"Deleted user '{user.username}'",
+    )
 
 
 @router.post("/{user_id}/activate", response_model=UserRead)
