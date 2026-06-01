@@ -10,6 +10,7 @@ from app.utils.enums import MetadataStatus, VerificationStatus
 from app.utils.normalization import parse_archive_name
 from sqlalchemy.orm import Session
 
+from app.repositories.library import LibraryRepository
 
 SUPPORTED_ARCHIVE_EXTENSIONS = {".zip", ".rar", ".7z", ".iso", ".exe"}
 SUPPORTED_FOLDER_TYPE = "folder"
@@ -30,18 +31,69 @@ class ArchiveScanItem:
 class ScannerService:
     def __init__(self) -> None:
         self.repo = ArchiveEntryRepository()
+        self.library_repo = LibraryRepository()
         self.matcher = MatchingService()
 
-    def scan_full(self, db: Session, scan_root: str | None = None) -> dict[str, int]:
-        base_path = Path(scan_root or settings.LIBRARY_SCAN_PATH)
-        items = self._discover_items(base_path)
-        return self._process_items(db, items)
+    def scan_full(self, db: Session, scan_root: str | None = None, ) -> dict[str, int]:
+        if scan_root:
+            return self._process_items(
+                db,
+                self._discover_items(Path(scan_root)),
+            )
+        libraries = self.library_repo.list_active(db)
+        stats = {
+            "created": 0,
+            "matched": 0,
+            "partial": 0,
+            "unmatched": 0,
+        }
+        for library in libraries:
+            if not library.enabled:
+                continue
+            library_stats = self._process_items(
+                db,
+                self._discover_items(Path(library.path)),
+                library_id=library.id,
+            )
+            for key in stats:
+                stats[key] += library_stats[key]
+        return stats
 
-    def scan_incremental(self, db: Session, scan_root: str | None = None) -> dict[str, int]:
-        base_path = Path(scan_root or settings.LIBRARY_SCAN_PATH)
-        existing_paths = {entry.file_path for entry in self.repo.list_all(db)}
-        items = [item for item in self._discover_items(base_path) if item.file_path not in existing_paths]
-        return self._process_items(db, items)
+    def scan_incremental(self, db: Session, scan_root: str | None = None, ) -> dict[str, int]:
+        existing_paths = {
+            entry.file_path
+            for entry in self.repo.list_all(db)
+        }
+        if scan_root:
+            items = [
+                item
+                for item in self._discover_items(Path(scan_root))
+                if item.file_path not in existing_paths
+            ]
+            return self._process_items(db, items)
+        libraries = self.library_repo.list_active(db)
+        stats = {
+            "created": 0,
+            "matched": 0,
+            "partial": 0,
+            "unmatched": 0,
+        }
+        for library in libraries:
+            if not library.enabled:
+                continue
+            items = [
+                item
+                for item in self._discover_items(Path(library.path))
+                if item.file_path not in existing_paths
+            ]
+            library_stats = self._process_items(
+                db,
+                items,
+                library_id=library.id,
+            )
+            for key in stats:
+                stats[key] += library_stats[key]
+        return stats
 
     def _discover_items(self, base_path: Path) -> list[ArchiveScanItem]:
         if not base_path.exists():
@@ -89,7 +141,7 @@ class ScannerService:
             release_group=parsed.release_group,
         )
 
-    def _process_items(self, db: Session, items: Iterable[ArchiveScanItem]) -> dict[str, int]:
+    def _process_items(self, db: Session, items: Iterable[ArchiveScanItem], library_id: str | None = None,) -> dict[str, int]:
         stats = {"created": 0, "matched": 0, "partial": 0, "unmatched": 0}
         for item in items:
             if self.repo.get_by_file_path(db, item.file_path):
@@ -126,6 +178,7 @@ class ScannerService:
                 "verification_status": VerificationStatus.UNKNOWN,
                 "parent_series_id": None,
                 "franchise_id": None,
+                "library_id": library_id,
             })
             stats["created"] += 1
             if metadata_status == MetadataStatus.MATCHED:

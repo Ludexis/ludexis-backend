@@ -15,7 +15,6 @@ from app.models.association_tables import (
 )
 from app.utils.enums import MetadataStatus, VerificationStatus
 
-
 class ArchiveEntry(Base):
     __tablename__ = "archive_entries"
     __allow_unmapped__ = True
@@ -41,6 +40,11 @@ class ArchiveEntry(Base):
     verification_status: VerificationStatus = mapped_column(sa.Enum(VerificationStatus, name="verification_status"), nullable=False, default=VerificationStatus.UNKNOWN)
     parent_series_id = mapped_column(sa.String(36), sa.ForeignKey("archive_entries.id", ondelete="SET NULL"), nullable=True)
     franchise_id = mapped_column(sa.String(36), sa.ForeignKey("franchises.id", ondelete="SET NULL"), nullable=True)
+    library_id = mapped_column(
+        sa.String(36),
+        sa.ForeignKey("libraries.id", ondelete="SET NULL"),
+        nullable=True,
+    )
     created_at = mapped_column(sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False)
     updated_at = mapped_column(sa.DateTime(timezone=True), server_default=sa.func.now(), onupdate=sa.func.now(), nullable=False)
     deleted_at = mapped_column(sa.DateTime(timezone=True), nullable=True)
@@ -51,6 +55,7 @@ class ArchiveEntry(Base):
     publishers = relationship("Publisher", secondary=archive_entry_publishers, back_populates="archive_entries")
     collections = relationship("Collection", secondary=collection_entries, back_populates="archive_entries")
     franchise = relationship("Franchise", back_populates="archive_entries")
+    library = relationship("Library", back_populates="archive_entries")
     screenshots = relationship("Screenshot", back_populates="archive_entry", cascade="all, delete-orphan")
     notes = relationship("Note", back_populates="archive_entry", cascade="all, delete-orphan")
     ratings = relationship("Rating", back_populates="archive_entry", cascade="all, delete-orphan")

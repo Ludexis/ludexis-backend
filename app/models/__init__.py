@@ -6,6 +6,7 @@ from app.models.developer import Developer  # noqa: F401
 from app.models.franchise import Franchise  # noqa: F401
 from app.models.genre import Genre  # noqa: F401
 from app.models.job_history import JobHistory  # noqa: F401
+from app.models.library import Library  # noqa: F401
 from app.models.metadata_source import MetadataSource  # noqa: F401
 from app.models.note import Note  # noqa: F401
 from app.models.permission import Permission  # noqa: F401
