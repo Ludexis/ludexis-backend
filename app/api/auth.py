@@ -18,7 +18,13 @@ auth_service = AuthService()
 audit_log_service = AuditLogService()
 refresh_repo = RefreshTokenRepository()
 
-@router.post("/login", response_model=Token)
+@router.post(
+    "/login",
+    response_model=Token,
+    summary="Login with credentials",
+    description="Authenticate a user and return access and refresh tokens.",
+    response_description="Tokens issued.",
+)
 def login(data: LoginRequest, db: Session = Depends(get_db)):
     user = auth_service.authenticate(db, data.username, data.password)
     if not user:
@@ -52,7 +58,13 @@ def login(data: LoginRequest, db: Session = Depends(get_db)):
         "token_type": "bearer",
     }
 
-@router.post("/refresh", response_model=Token)
+@router.post(
+    "/refresh",
+    response_model=Token,
+    summary="Refresh access token",
+    description="Exchange a valid refresh token for new tokens.",
+    response_description="Tokens refreshed.",
+)
 def refresh(data: RefreshRequest, db: Session = Depends(get_db)):
     try:
         tokens = auth_service.refresh_tokens(db, data.refresh_token)
@@ -77,7 +89,13 @@ def refresh(data: RefreshRequest, db: Session = Depends(get_db)):
         "token_type": "bearer",
     }
 
-@router.post("/logout", status_code=status.HTTP_204_NO_CONTENT)
+@router.post(
+    "/logout",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Logout",
+    description="Revoke the provided refresh token.",
+    response_description="Logout completed.",
+)
 def logout(data: LogoutRequest, db: Session = Depends(get_db)):
     token_record = refresh_repo.get_by_token(db, data.refresh_token)
     was_revoked = token_record.revoked if token_record is not None else None
@@ -92,11 +110,23 @@ def logout(data: LogoutRequest, db: Session = Depends(get_db)):
             details="User logged out",
         )
 
-@router.get("/me", response_model=UserRead)
+@router.get(
+    "/me",
+    response_model=UserRead,
+    summary="Get current user",
+    description="Return the currently authenticated user.",
+    response_description="Current user retrieved.",
+)
 def read_current_user(current_user: UserRead = Depends(get_current_user)):
     return current_user
 
-@router.post("/token", response_model=Token)
+@router.post(
+    "/token",
+    response_model=Token,
+    summary="OAuth2 password login",
+    description="Authenticate using OAuth2 password form and return tokens.",
+    response_description="Tokens issued.",
+)
 def token_login(
     form_data: OAuth2PasswordRequestForm = Depends(),
     db: Session = Depends(get_db),

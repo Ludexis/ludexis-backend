@@ -14,6 +14,19 @@ class CollectionBase(BaseModel):
 class CollectionCreate(CollectionBase):
     entry_ids: list[str] = []
 
+    model_config = {
+        "json_schema_extra": {
+            "examples": [
+                {
+                    "name": "Favorites",
+                    "description": "Personal favorites for quick access.",
+                    "visibility": "public",
+                    "entry_ids": ["entry-uuid-1", "entry-uuid-2"],
+                },
+            ],
+        },
+    }
+
 
 class CollectionUpdate(BaseModel):
     name: str | None = None
@@ -23,9 +36,31 @@ class CollectionUpdate(BaseModel):
     visibility: str | None = None
     entry_ids: list[str] | None = None
 
+    model_config = {
+        "json_schema_extra": {
+            "examples": [
+                {
+                    "description": "Updated description.",
+                    "visibility": "private",
+                    "entry_ids": ["entry-uuid-3"],
+                },
+            ],
+        },
+    }
+
 
 class CollectionEntryRequest(BaseModel):
     entry_id: str
+
+    model_config = {
+        "json_schema_extra": {
+            "examples": [
+                {
+                    "entry_id": "entry-uuid-1",
+                },
+            ],
+        },
+    }
 
 
 class CollectionRead(CollectionBase, TimestampedModel):

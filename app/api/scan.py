@@ -18,7 +18,14 @@ job_repo = JobHistoryRepository()
 audit_log_service = AuditLogService()
 
 
-@router.post("/full", response_model=JobHistoryRead, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/full",
+    response_model=JobHistoryRead,
+    status_code=status.HTTP_201_CREATED,
+    summary="Start full scan",
+    description="Queue a full library scan job.",
+    response_description="Scan job started.",
+)
 def start_full_scan(
     current_user=Depends(require_permission(PermissionName.RUN_SCANS)),
     db: Session = Depends(get_db),
@@ -34,7 +41,14 @@ def start_full_scan(
     return job
 
 
-@router.post("/incremental", response_model=JobHistoryRead, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/incremental",
+    response_model=JobHistoryRead,
+    status_code=status.HTTP_201_CREATED,
+    summary="Start incremental scan",
+    description="Queue an incremental library scan job.",
+    response_description="Scan job started.",
+)
 def start_incremental_scan(
     current_user=Depends(require_permission(PermissionName.RUN_SCANS)),
     db: Session = Depends(get_db),
@@ -50,7 +64,13 @@ def start_incremental_scan(
     return job
 
 
-@router.get("/status", response_model=ScanStatus)
+@router.get(
+    "/status",
+    response_model=ScanStatus,
+    summary="Get scan status",
+    description="Return aggregated scan job status counts.",
+    response_description="Scan status retrieved.",
+)
 def read_scan_status(
     current_user=Depends(get_current_active_user),
     db: Session = Depends(get_db),

@@ -13,7 +13,13 @@ service = FranchiseService()
 audit_service = AuditService()
 
 
-@router.get("/", response_model=list[FranchiseRead])
+@router.get(
+    "/",
+    response_model=list[FranchiseRead],
+    summary="List franchises",
+    description="Return franchises with pagination.",
+    response_description="Franchises retrieved.",
+)
 def list_franchises(
     current_user=Depends(get_current_active_user),
     db: Session = Depends(get_db),
@@ -23,7 +29,13 @@ def list_franchises(
     return service.list_items(db, offset=offset, limit=limit)
 
 
-@router.get("/{franchise_id}", response_model=FranchiseRead)
+@router.get(
+    "/{franchise_id}",
+    response_model=FranchiseRead,
+    summary="Get franchise",
+    description="Return a single franchise by ID.",
+    response_description="Franchise retrieved.",
+)
 def read_franchise(
     franchise_id: str,
     current_user=Depends(get_current_active_user),
@@ -35,7 +47,14 @@ def read_franchise(
     return franchise
 
 
-@router.post("/", response_model=FranchiseRead, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/",
+    response_model=FranchiseRead,
+    status_code=status.HTTP_201_CREATED,
+    summary="Create franchise",
+    description="Create a new franchise record.",
+    response_description="Franchise created.",
+)
 def create_franchise(
     data: FranchiseCreate,
     current_user=Depends(require_permission(PermissionName.EDIT_METADATA)),
@@ -55,7 +74,13 @@ def create_franchise(
     return franchise
 
 
-@router.patch("/{franchise_id}", response_model=FranchiseRead)
+@router.patch(
+    "/{franchise_id}",
+    response_model=FranchiseRead,
+    summary="Update franchise",
+    description="Update a franchise record.",
+    response_description="Franchise updated.",
+)
 def update_franchise(
     franchise_id: str,
     data: FranchiseUpdate,
@@ -77,7 +102,13 @@ def update_franchise(
     return updated
 
 
-@router.delete("/{franchise_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete(
+    "/{franchise_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Delete franchise",
+    description="Soft delete a franchise by ID.",
+    response_description="Franchise deleted.",
+)
 def delete_franchise(
     franchise_id: str,
     current_user=Depends(require_permission(PermissionName.EDIT_METADATA)),

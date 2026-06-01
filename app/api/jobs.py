@@ -12,7 +12,14 @@ router = APIRouter(prefix="/jobs", tags=["jobs"])
 service = JobService()
 
 
-@router.post("/start", response_model=JobHistoryRead, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/start",
+    response_model=JobHistoryRead,
+    status_code=status.HTTP_201_CREATED,
+    summary="Start job",
+    description="Start a background job by type.",
+    response_description="Job started.",
+)
 def start_job(
     data: JobHistoryCreate,
     current_user=Depends(require_permission(PermissionName.RUN_SCANS)),
@@ -24,7 +31,13 @@ def start_job(
     return job
 
 
-@router.post("/{job_id}/cancel", response_model=JobHistoryRead)
+@router.post(
+    "/{job_id}/cancel",
+    response_model=JobHistoryRead,
+    summary="Cancel job",
+    description="Cancel a pending or running job by ID.",
+    response_description="Job canceled.",
+)
 def cancel_job(
     job_id: str,
     current_user=Depends(require_permission(PermissionName.RUN_SCANS)),
@@ -36,7 +49,13 @@ def cancel_job(
     return job
 
 
-@router.get("/", response_model=list[JobHistoryRead])
+@router.get(
+    "/",
+    response_model=list[JobHistoryRead],
+    summary="List jobs",
+    description="Return job history with optional filters.",
+    response_description="Jobs retrieved.",
+)
 def list_jobs(
     current_user=Depends(get_current_active_user),
     db: Session = Depends(get_db),
@@ -48,7 +67,13 @@ def list_jobs(
     return service.list_jobs(db, job_type=job_type, status=status, offset=offset, limit=limit)
 
 
-@router.get("/{job_id}", response_model=JobHistoryRead)
+@router.get(
+    "/{job_id}",
+    response_model=JobHistoryRead,
+    summary="Get job",
+    description="Return a job by ID.",
+    response_description="Job retrieved.",
+)
 def read_job(
     job_id: str,
     current_user=Depends(get_current_active_user),

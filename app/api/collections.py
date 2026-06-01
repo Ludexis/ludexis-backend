@@ -13,7 +13,13 @@ service = CollectionService()
 audit_service = AuditService()
 
 
-@router.get("/", response_model=list[CollectionRead])
+@router.get(
+    "/",
+    response_model=list[CollectionRead],
+    summary="List collections",
+    description="Return collections with pagination.",
+    response_description="Collections retrieved.",
+)
 def list_collections(
     current_user=Depends(get_current_active_user),
     db: Session = Depends(get_db),
@@ -23,7 +29,13 @@ def list_collections(
     return service.list_items(db, offset=offset, limit=limit)
 
 
-@router.get("/{collection_id}", response_model=CollectionRead)
+@router.get(
+    "/{collection_id}",
+    response_model=CollectionRead,
+    summary="Get collection",
+    description="Return a single collection by ID.",
+    response_description="Collection retrieved.",
+)
 def read_collection(
     collection_id: str,
     current_user=Depends(get_current_active_user),
@@ -35,7 +47,14 @@ def read_collection(
     return collection
 
 
-@router.post("/", response_model=CollectionRead, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/",
+    response_model=CollectionRead,
+    status_code=status.HTTP_201_CREATED,
+    summary="Create collection",
+    description="Create a new collection with optional entry IDs.",
+    response_description="Collection created.",
+)
 def create_collection(
     data: CollectionCreate,
     current_user=Depends(require_permission(PermissionName.MANAGE_COLLECTIONS)),
@@ -56,7 +75,13 @@ def create_collection(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
 
 
-@router.patch("/{collection_id}", response_model=CollectionRead)
+@router.patch(
+    "/{collection_id}",
+    response_model=CollectionRead,
+    summary="Update collection",
+    description="Update collection fields and entry membership.",
+    response_description="Collection updated.",
+)
 def update_collection(
     collection_id: str,
     data: CollectionUpdate,
@@ -81,7 +106,13 @@ def update_collection(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
 
 
-@router.delete("/{collection_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete(
+    "/{collection_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Delete collection",
+    description="Soft delete a collection by ID.",
+    response_description="Collection deleted.",
+)
 def delete_collection(
     collection_id: str,
     current_user=Depends(require_permission(PermissionName.MANAGE_COLLECTIONS)),
@@ -101,7 +132,13 @@ def delete_collection(
     )
 
 
-@router.post("/{collection_id}/entries", response_model=CollectionRead)
+@router.post(
+    "/{collection_id}/entries",
+    response_model=CollectionRead,
+    summary="Add entry to collection",
+    description="Attach an archive entry to a collection.",
+    response_description="Collection updated.",
+)
 def add_entry_to_collection(
     collection_id: str,
     data: CollectionEntryRequest,
@@ -126,7 +163,13 @@ def add_entry_to_collection(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
 
 
-@router.delete("/{collection_id}/entries/{entry_id}", response_model=CollectionRead)
+@router.delete(
+    "/{collection_id}/entries/{entry_id}",
+    response_model=CollectionRead,
+    summary="Remove entry from collection",
+    description="Remove an archive entry from a collection.",
+    response_description="Collection updated.",
+)
 def remove_entry_from_collection(
     collection_id: str,
     entry_id: str,

@@ -13,7 +13,13 @@ service = ArchiveEntryService()
 audit_service = AuditService()
 
 
-@router.get("/", response_model=list[ArchiveEntryRead])
+@router.get(
+    "/",
+    response_model=list[ArchiveEntryRead],
+    summary="List archive entries",
+    description="Return archive entries with pagination.",
+    response_description="Archive entries retrieved.",
+)
 def list_archive_entries(
     current_user=Depends(get_current_active_user),
     db: Session = Depends(get_db),
@@ -23,7 +29,13 @@ def list_archive_entries(
     return service.list_entries(db, offset=offset, limit=limit)
 
 
-@router.get("/{archive_entry_id}", response_model=ArchiveEntryRead)
+@router.get(
+    "/{archive_entry_id}",
+    response_model=ArchiveEntryRead,
+    summary="Get archive entry",
+    description="Return a single archive entry by ID.",
+    response_description="Archive entry retrieved.",
+)
 def read_archive_entry(
     archive_entry_id: str,
     current_user=Depends(get_current_active_user),
@@ -35,7 +47,14 @@ def read_archive_entry(
     return entry
 
 
-@router.post("/", response_model=ArchiveEntryRead, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/",
+    response_model=ArchiveEntryRead,
+    status_code=status.HTTP_201_CREATED,
+    summary="Create archive entry",
+    description="Create a new archive entry with optional related IDs.",
+    response_description="Archive entry created.",
+)
 def create_archive_entry(
     data: ArchiveEntryCreate,
     current_user=Depends(require_permission(PermissionName.EDIT_METADATA)),
@@ -56,7 +75,13 @@ def create_archive_entry(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
 
 
-@router.patch("/{archive_entry_id}", response_model=ArchiveEntryRead)
+@router.patch(
+    "/{archive_entry_id}",
+    response_model=ArchiveEntryRead,
+    summary="Update archive entry",
+    description="Update fields and relationships for an archive entry.",
+    response_description="Archive entry updated.",
+)
 def update_archive_entry(
     archive_entry_id: str,
     data: ArchiveEntryUpdate,
@@ -81,7 +106,13 @@ def update_archive_entry(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
 
 
-@router.delete("/{archive_entry_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete(
+    "/{archive_entry_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Delete archive entry",
+    description="Soft delete an archive entry by ID.",
+    response_description="Archive entry deleted.",
+)
 def delete_archive_entry(
     archive_entry_id: str,
     current_user=Depends(require_permission(PermissionName.EDIT_METADATA)),

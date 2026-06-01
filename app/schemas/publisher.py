@@ -8,13 +8,34 @@ class PublisherBase(BaseModel):
 
 
 class PublisherCreate(PublisherBase):
-    pass
+    model_config = {
+        "json_schema_extra": {
+            "examples": [
+                {
+                    "name": "Orbit Publishing",
+                    "description": "Specializes in indie releases.",
+                    "website": "https://orbit.example",
+                },
+            ],
+        },
+    }
 
 
 class PublisherUpdate(BaseModel):
     name: str | None = None
     description: str | None = None
     website: str | None = None
+
+    model_config = {
+        "json_schema_extra": {
+            "examples": [
+                {
+                    "description": "Updated publisher profile.",
+                    "website": "https://orbit.example/press",
+                },
+            ],
+        },
+    }
 
 
 class PublisherRead(PublisherBase):

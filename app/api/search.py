@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
 from app.core.auth import get_current_active_user
@@ -10,19 +10,25 @@ router = APIRouter(prefix="/search", tags=["search"])
 service = SearchService()
 
 
-@router.get("/", response_model=list[ArchiveEntryRead])
+@router.get(
+    "/",
+    response_model=list[ArchiveEntryRead],
+    summary="Search archive entries",
+    description="Search archive entries by text and filters.",
+    response_description="Search results retrieved.",
+)
 def search_archive_entries(
-    q: str | None = None,
-    genre: str | None = None,
-    tag: str | None = None,
-    developer: str | None = None,
-    publisher: str | None = None,
-    franchise: str | None = None,
-    metadata_status: str | None = None,
-    verification_status: str | None = None,
-    storage_device: str | None = None,
-    offset: int = 0,
-    limit: int = 100,
+    q: str | None = Query(None, description="Text query", example="space adventure"),
+    genre: str | None = Query(None, description="Genre filter", example="RPG"),
+    tag: str | None = Query(None, description="Tag filter", example="retro"),
+    developer: str | None = Query(None, description="Developer filter", example="Studio Polaris"),
+    publisher: str | None = Query(None, description="Publisher filter", example="Orbit Publishing"),
+    franchise: str | None = Query(None, description="Franchise filter", example="Skybound Saga"),
+    metadata_status: str | None = Query(None, description="Metadata status filter", example="MATCHED"),
+    verification_status: str | None = Query(None, description="Verification status filter", example="VERIFIED"),
+    storage_device: str | None = Query(None, description="Storage device filter", example="NAS-01"),
+    offset: int = Query(0, description="Pagination offset", example=0),
+    limit: int = Query(100, description="Pagination limit", example=100),
     current_user=Depends(get_current_active_user),
     db: Session = Depends(get_db),
 ):

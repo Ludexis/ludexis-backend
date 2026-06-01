@@ -16,7 +16,13 @@ audit_service = AuditService()
 role_repo = RoleRepository()
 
 
-@router.get("/audit-logs", response_model=list[AuditLogRead])
+@router.get(
+    "/audit-logs",
+    response_model=list[AuditLogRead],
+    summary="List audit logs",
+    description="Return audit log entries filtered by user, entity, or action.",
+    response_description="Audit logs retrieved.",
+)
 def read_audit_logs(
     user_id: str | None = None,
     entity: str | None = None,
@@ -29,7 +35,13 @@ def read_audit_logs(
     return audit_service.list_logs(db, user_id=user_id, entity=entity, action=action, offset=offset, limit=limit)
 
 
-@router.get("/stats", response_model=AdminStats)
+@router.get(
+    "/stats",
+    response_model=AdminStats,
+    summary="Get admin stats",
+    description="Return aggregate counts and coverage metrics for administrative dashboards.",
+    response_description="Admin stats retrieved.",
+)
 def read_admin_stats(
     current_user=Depends(require_permission(PermissionName.ACCESS_ADMIN)),
     db: Session = Depends(get_db),
@@ -37,7 +49,12 @@ def read_admin_stats(
     return admin_service.get_stats(db)
 
 
-@router.get("/permission-report")
+@router.get(
+    "/permission-report",
+    summary="Get permission report",
+    description="Return a role-to-permissions mapping for RBAC auditing.",
+    response_description="Permission report retrieved.",
+)
 def read_permission_report(
     current_user=Depends(require_permission(PermissionName.ACCESS_ADMIN)),
     db: Session = Depends(get_db),

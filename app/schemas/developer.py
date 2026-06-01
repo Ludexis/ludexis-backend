@@ -8,13 +8,34 @@ class DeveloperBase(BaseModel):
 
 
 class DeveloperCreate(DeveloperBase):
-    pass
+    model_config = {
+        "json_schema_extra": {
+            "examples": [
+                {
+                    "name": "Studio Polaris",
+                    "description": "Independent game studio.",
+                    "website": "https://studiopolaris.example",
+                },
+            ],
+        },
+    }
 
 
 class DeveloperUpdate(BaseModel):
     name: str | None = None
     description: str | None = None
     website: str | None = None
+
+    model_config = {
+        "json_schema_extra": {
+            "examples": [
+                {
+                    "description": "Updated studio profile.",
+                    "website": "https://studiopolaris.example/about",
+                },
+            ],
+        },
+    }
 
 
 class DeveloperRead(DeveloperBase):

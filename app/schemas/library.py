@@ -10,13 +10,34 @@ class LibraryBase(BaseModel):
 
 
 class LibraryCreate(LibraryBase):
-    pass
+    model_config = {
+        "json_schema_extra": {
+            "examples": [
+                {
+                    "name": "Main Library",
+                    "path": "D:/GameArchives",
+                    "enabled": True,
+                },
+            ],
+        },
+    }
 
 
 class LibraryUpdate(BaseModel):
     name: str | None = None
     path: str | None = None
     enabled: bool | None = None
+
+    model_config = {
+        "json_schema_extra": {
+            "examples": [
+                {
+                    "name": "Legacy Library",
+                    "enabled": False,
+                },
+            ],
+        },
+    }
 
 
 class LibraryRead(LibraryBase, TimestampedModel):

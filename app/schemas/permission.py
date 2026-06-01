@@ -7,7 +7,16 @@ class PermissionBase(BaseModel):
 
 
 class PermissionCreate(PermissionBase):
-    pass
+    model_config = {
+        "json_schema_extra": {
+            "examples": [
+                {
+                    "name": "ACCESS_ADMIN",
+                    "description": "Access administrative endpoints",
+                },
+            ],
+        },
+    }
 
 
 class PermissionRead(PermissionBase):

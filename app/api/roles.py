@@ -30,7 +30,13 @@ def _load_permissions(db: Session, permission_ids: list[str]) -> list:
     return permissions
 
 
-@router.get("/", response_model=list[RoleRead])
+@router.get(
+    "/",
+    response_model=list[RoleRead],
+    summary="List roles",
+    description="Return all roles.",
+    response_description="Roles retrieved.",
+)
 def list_roles(
     current_user=Depends(require_permission(PermissionName.MANAGE_USERS)),
     db: Session = Depends(get_db),
@@ -38,7 +44,14 @@ def list_roles(
     return role_repo.list_items(db)
 
 
-@router.post("/", response_model=RoleRead, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/",
+    response_model=RoleRead,
+    status_code=status.HTTP_201_CREATED,
+    summary="Create role",
+    description="Create a new role and assign permissions.",
+    response_description="Role created.",
+)
 def create_role(
     data: RoleCreate,
     current_user=Depends(require_permission(PermissionName.MANAGE_USERS)),
@@ -61,7 +74,13 @@ def create_role(
     return role
 
 
-@router.get("/{role_id}", response_model=RoleRead)
+@router.get(
+    "/{role_id}",
+    response_model=RoleRead,
+    summary="Get role",
+    description="Return a role by ID.",
+    response_description="Role retrieved.",
+)
 def read_role(
     role_id: str,
     current_user=Depends(require_permission(PermissionName.MANAGE_USERS)),
@@ -73,7 +92,13 @@ def read_role(
     return role
 
 
-@router.patch("/{role_id}", response_model=RoleRead)
+@router.patch(
+    "/{role_id}",
+    response_model=RoleRead,
+    summary="Update role",
+    description="Update role attributes and permissions.",
+    response_description="Role updated.",
+)
 def update_role(
     role_id: str,
     data: RoleUpdate,
@@ -107,7 +132,13 @@ def update_role(
     return role
 
 
-@router.delete("/{role_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete(
+    "/{role_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Delete role",
+    description="Delete a role by ID.",
+    response_description="Role deleted.",
+)
 def delete_role(
     role_id: str,
     current_user=Depends(require_permission(PermissionName.MANAGE_USERS)),

@@ -20,6 +20,16 @@ class JobHistoryBase(BaseModel):
 class JobHistoryCreate(BaseModel):
     job_type: JobType
 
+    model_config = {
+        "json_schema_extra": {
+            "examples": [
+                {
+                    "job_type": "LIBRARY_SCAN",
+                },
+            ],
+        },
+    }
+
 
 class JobHistoryRead(JobHistoryBase):
     id: str
@@ -31,3 +41,13 @@ class JobHistoryRead(JobHistoryBase):
 
 class JobStartRequest(BaseModel):
     job_type: JobType
+
+    model_config = {
+        "json_schema_extra": {
+            "examples": [
+                {
+                    "job_type": "INCREMENTAL_SCAN",
+                },
+            ],
+        },
+    }

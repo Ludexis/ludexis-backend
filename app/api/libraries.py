@@ -14,7 +14,13 @@ service = LibraryService()
 audit_log_service = AuditLogService()
 
 
-@router.get("/", response_model=list[LibraryRead])
+@router.get(
+    "/",
+    response_model=list[LibraryRead],
+    summary="List libraries",
+    description="Return libraries with pagination.",
+    response_description="Libraries retrieved.",
+)
 def list_libraries(
     current_user=Depends(get_current_active_user),
     db: Session = Depends(get_db),
@@ -24,7 +30,13 @@ def list_libraries(
     return service.list_items(db, offset=offset, limit=limit)
 
 
-@router.get("/{library_id}", response_model=LibraryRead)
+@router.get(
+    "/{library_id}",
+    response_model=LibraryRead,
+    summary="Get library",
+    description="Return a single library by ID.",
+    response_description="Library retrieved.",
+)
 def read_library(
     library_id: str,
     current_user=Depends(get_current_active_user),
@@ -36,7 +48,14 @@ def read_library(
     return library
 
 
-@router.post("/", response_model=LibraryRead, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/",
+    response_model=LibraryRead,
+    status_code=status.HTTP_201_CREATED,
+    summary="Create library",
+    description="Create a new library entry.",
+    response_description="Library created.",
+)
 def create_library(
     data: LibraryCreate,
     current_user=Depends(require_permission(PermissionName.ACCESS_ADMIN)),
@@ -57,7 +76,13 @@ def create_library(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
 
 
-@router.patch("/{library_id}", response_model=LibraryRead)
+@router.patch(
+    "/{library_id}",
+    response_model=LibraryRead,
+    summary="Update library",
+    description="Update a library entry.",
+    response_description="Library updated.",
+)
 def update_library(
     library_id: str,
     data: LibraryUpdate,
@@ -82,7 +107,13 @@ def update_library(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
 
 
-@router.delete("/{library_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete(
+    "/{library_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Delete library",
+    description="Soft delete a library by ID.",
+    response_description="Library deleted.",
+)
 def delete_library(
     library_id: str,
     current_user=Depends(require_permission(PermissionName.ACCESS_ADMIN)),

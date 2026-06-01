@@ -13,7 +13,13 @@ service = PublisherService()
 audit_service = AuditService()
 
 
-@router.get("/", response_model=list[PublisherRead])
+@router.get(
+    "/",
+    response_model=list[PublisherRead],
+    summary="List publishers",
+    description="Return publishers with pagination.",
+    response_description="Publishers retrieved.",
+)
 def list_publishers(
     current_user=Depends(get_current_active_user),
     db: Session = Depends(get_db),
@@ -23,7 +29,13 @@ def list_publishers(
     return service.list_items(db, offset=offset, limit=limit)
 
 
-@router.get("/{publisher_id}", response_model=PublisherRead)
+@router.get(
+    "/{publisher_id}",
+    response_model=PublisherRead,
+    summary="Get publisher",
+    description="Return a single publisher by ID.",
+    response_description="Publisher retrieved.",
+)
 def read_publisher(
     publisher_id: str,
     current_user=Depends(get_current_active_user),
@@ -35,7 +47,14 @@ def read_publisher(
     return publisher
 
 
-@router.post("/", response_model=PublisherRead, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/",
+    response_model=PublisherRead,
+    status_code=status.HTTP_201_CREATED,
+    summary="Create publisher",
+    description="Create a new publisher record.",
+    response_description="Publisher created.",
+)
 def create_publisher(
     data: PublisherCreate,
     current_user=Depends(require_permission(PermissionName.EDIT_METADATA)),
@@ -55,7 +74,13 @@ def create_publisher(
     return publisher
 
 
-@router.patch("/{publisher_id}", response_model=PublisherRead)
+@router.patch(
+    "/{publisher_id}",
+    response_model=PublisherRead,
+    summary="Update publisher",
+    description="Update a publisher record.",
+    response_description="Publisher updated.",
+)
 def update_publisher(
     publisher_id: str,
     data: PublisherUpdate,
@@ -77,7 +102,13 @@ def update_publisher(
     return updated
 
 
-@router.delete("/{publisher_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete(
+    "/{publisher_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Delete publisher",
+    description="Soft delete a publisher by ID.",
+    response_description="Publisher deleted.",
+)
 def delete_publisher(
     publisher_id: str,
     current_user=Depends(require_permission(PermissionName.EDIT_METADATA)),

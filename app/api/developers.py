@@ -13,7 +13,13 @@ service = DeveloperService()
 audit_service = AuditService()
 
 
-@router.get("/", response_model=list[DeveloperRead])
+@router.get(
+    "/",
+    response_model=list[DeveloperRead],
+    summary="List developers",
+    description="Return developers with pagination.",
+    response_description="Developers retrieved.",
+)
 def list_developers(
     current_user=Depends(get_current_active_user),
     db: Session = Depends(get_db),
@@ -23,7 +29,13 @@ def list_developers(
     return service.list_items(db, offset=offset, limit=limit)
 
 
-@router.get("/{developer_id}", response_model=DeveloperRead)
+@router.get(
+    "/{developer_id}",
+    response_model=DeveloperRead,
+    summary="Get developer",
+    description="Return a single developer by ID.",
+    response_description="Developer retrieved.",
+)
 def read_developer(
     developer_id: str,
     current_user=Depends(get_current_active_user),
@@ -35,7 +47,14 @@ def read_developer(
     return developer
 
 
-@router.post("/", response_model=DeveloperRead, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/",
+    response_model=DeveloperRead,
+    status_code=status.HTTP_201_CREATED,
+    summary="Create developer",
+    description="Create a new developer record.",
+    response_description="Developer created.",
+)
 def create_developer(
     data: DeveloperCreate,
     current_user=Depends(require_permission(PermissionName.EDIT_METADATA)),
@@ -55,7 +74,13 @@ def create_developer(
     return developer
 
 
-@router.patch("/{developer_id}", response_model=DeveloperRead)
+@router.patch(
+    "/{developer_id}",
+    response_model=DeveloperRead,
+    summary="Update developer",
+    description="Update a developer record.",
+    response_description="Developer updated.",
+)
 def update_developer(
     developer_id: str,
     data: DeveloperUpdate,
@@ -77,7 +102,13 @@ def update_developer(
     return updated
 
 
-@router.delete("/{developer_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete(
+    "/{developer_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Delete developer",
+    description="Soft delete a developer by ID.",
+    response_description="Developer deleted.",
+)
 def delete_developer(
     developer_id: str,
     current_user=Depends(require_permission(PermissionName.EDIT_METADATA)),

@@ -44,7 +44,13 @@ def _require_manage_users_if_initialized(
     return current_user
 
 
-@router.get("/", response_model=list[UserRead])
+@router.get(
+    "/",
+    response_model=list[UserRead],
+    summary="List users",
+    description="Return users with pagination.",
+    response_description="Users retrieved.",
+)
 def list_users(
     current_user: User = Depends(require_permission(PermissionName.MANAGE_USERS)),
     db: Session = Depends(get_db),
@@ -54,7 +60,14 @@ def list_users(
     return user_repo.list_items(db, offset=skip, limit=limit)
 
 
-@router.post("/", response_model=UserRead, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/",
+    response_model=UserRead,
+    status_code=status.HTTP_201_CREATED,
+    summary="Create user",
+    description="Create a new user and optionally assign roles.",
+    response_description="User created.",
+)
 def create_user(
     data: UserCreate,
     current_user: User | None = Depends(_require_manage_users_if_initialized),
@@ -120,7 +133,13 @@ def _get_user_or_404(db: Session, user_id: str) -> User:
     return user
 
 
-@router.get("/{user_id}", response_model=UserRead)
+@router.get(
+    "/{user_id}",
+    response_model=UserRead,
+    summary="Get user",
+    description="Return a user by ID.",
+    response_description="User retrieved.",
+)
 def read_user(
     user_id: str,
     current_user: User = Depends(require_permission(PermissionName.MANAGE_USERS)),
@@ -129,7 +148,13 @@ def read_user(
     return _get_user_or_404(db, user_id)
 
 
-@router.patch("/{user_id}", response_model=UserRead)
+@router.patch(
+    "/{user_id}",
+    response_model=UserRead,
+    summary="Update user",
+    description="Update a user record and roles.",
+    response_description="User updated.",
+)
 def update_user(
     user_id: str,
     data: UserUpdate,
@@ -206,7 +231,13 @@ def update_user(
     return user
 
 
-@router.delete("/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete(
+    "/{user_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Delete user",
+    description="Soft delete a user by ID.",
+    response_description="User deleted.",
+)
 def delete_user(
     user_id: str,
     current_user: User = Depends(require_permission(PermissionName.MANAGE_USERS)),
@@ -224,7 +255,13 @@ def delete_user(
     )
 
 
-@router.post("/{user_id}/activate", response_model=UserRead)
+@router.post(
+    "/{user_id}/activate",
+    response_model=UserRead,
+    summary="Activate user",
+    description="Activate a user account.",
+    response_description="User activated.",
+)
 def activate_user(
     user_id: str,
     current_user: User = Depends(require_permission(PermissionName.MANAGE_USERS)),
@@ -234,7 +271,13 @@ def activate_user(
     return user_repo.activate(db, user)
 
 
-@router.post("/{user_id}/deactivate", response_model=UserRead)
+@router.post(
+    "/{user_id}/deactivate",
+    response_model=UserRead,
+    summary="Deactivate user",
+    description="Deactivate a user account.",
+    response_description="User deactivated.",
+)
 def deactivate_user(
     user_id: str,
     current_user: User = Depends(require_permission(PermissionName.MANAGE_USERS)),
@@ -244,7 +287,13 @@ def deactivate_user(
     return user_repo.deactivate(db, user)
 
 
-@router.post("/{user_id}/reset-password", response_model=UserRead)
+@router.post(
+    "/{user_id}/reset-password",
+    response_model=UserRead,
+    summary="Reset user password",
+    description="Reset a user's password.",
+    response_description="Password reset.",
+)
 def reset_password(
     user_id: str,
     data: PasswordResetRequest,

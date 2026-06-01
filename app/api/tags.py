@@ -13,7 +13,13 @@ service = TagService()
 audit_service = AuditService()
 
 
-@router.get("/", response_model=list[TagRead])
+@router.get(
+    "/",
+    response_model=list[TagRead],
+    summary="List tags",
+    description="Return tags with pagination.",
+    response_description="Tags retrieved.",
+)
 def list_tags(
     current_user=Depends(get_current_active_user),
     db: Session = Depends(get_db),
@@ -23,7 +29,13 @@ def list_tags(
     return service.list_items(db, offset=offset, limit=limit)
 
 
-@router.get("/{tag_id}", response_model=TagRead)
+@router.get(
+    "/{tag_id}",
+    response_model=TagRead,
+    summary="Get tag",
+    description="Return a single tag by ID.",
+    response_description="Tag retrieved.",
+)
 def read_tag(
     tag_id: str,
     current_user=Depends(get_current_active_user),
@@ -35,7 +47,14 @@ def read_tag(
     return tag
 
 
-@router.post("/", response_model=TagRead, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/",
+    response_model=TagRead,
+    status_code=status.HTTP_201_CREATED,
+    summary="Create tag",
+    description="Create a new tag.",
+    response_description="Tag created.",
+)
 def create_tag(
     data: TagCreate,
     current_user=Depends(require_permission(PermissionName.EDIT_METADATA)),
@@ -55,7 +74,13 @@ def create_tag(
     return tag
 
 
-@router.patch("/{tag_id}", response_model=TagRead)
+@router.patch(
+    "/{tag_id}",
+    response_model=TagRead,
+    summary="Update tag",
+    description="Update a tag record.",
+    response_description="Tag updated.",
+)
 def update_tag(
     tag_id: str,
     data: TagUpdate,
@@ -77,7 +102,13 @@ def update_tag(
     return updated
 
 
-@router.delete("/{tag_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete(
+    "/{tag_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Delete tag",
+    description="Soft delete a tag by ID.",
+    response_description="Tag deleted.",
+)
 def delete_tag(
     tag_id: str,
     current_user=Depends(require_permission(PermissionName.EDIT_METADATA)),

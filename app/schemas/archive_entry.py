@@ -49,6 +49,30 @@ class ArchiveEntryCreate(ArchiveEntryBase):
     publisher_ids: list[str] = []
     collection_ids: list[str] = []
 
+    model_config = {
+        "json_schema_extra": {
+            "examples": [
+                {
+                    "title": "Star Explorer",
+                    "description": "A retro space adventure.",
+                    "version": "1.0.0",
+                    "engine": "Custom",
+                    "release_date": "1997-10-31",
+                    "archive_type": "iso",
+                    "file_path": "D:/Archives/StarExplorer.iso",
+                    "storage_device": "NAS-01",
+                    "metadata_status": "UNMATCHED",
+                    "verification_status": "UNKNOWN",
+                    "tag_ids": ["tag-uuid-1"],
+                    "developer_ids": ["dev-uuid-1"],
+                    "publisher_ids": ["pub-uuid-1"],
+                    "collection_ids": ["col-uuid-1"],
+                    "related_entry_ids": [],
+                },
+            ],
+        },
+    }
+
 
 class ArchiveEntryUpdate(BaseModel):
     title: str | None = None
@@ -75,6 +99,18 @@ class ArchiveEntryUpdate(BaseModel):
     publisher_ids: list[str] | None = None
     collection_ids: list[str] | None = None
     related_entry_ids: list[str] | None = None
+
+    model_config = {
+        "json_schema_extra": {
+            "examples": [
+                {
+                    "description": "Updated description for the archive entry.",
+                    "metadata_status": "MATCHED",
+                    "tag_ids": ["tag-uuid-1", "tag-uuid-2"],
+                },
+            ],
+        },
+    }
 
 
 class ArchiveEntryRead(ArchiveEntryBase, TimestampedModel):

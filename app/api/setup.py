@@ -75,13 +75,25 @@ def seed_roles(db: Session, permissions: dict[str, Permission]) -> dict[str, Rol
     db.flush()
     return roles
 
-@router.get("/status")
+@router.get(
+    "/status",
+    summary="Get setup status",
+    description="Return whether the system has been initialized.",
+    response_description="Setup status retrieved.",
+)
 def setup_status(db: Session = Depends(get_db)):
     initialized = user_repo.has_any(db)
     return {"initialized": initialized}
 
 
-@router.post("/initialize", response_model=UserRead, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/initialize",
+    response_model=UserRead,
+    status_code=status.HTTP_201_CREATED,
+    summary="Initialize system",
+    description="Seed permissions and roles, and create the first administrator.",
+    response_description="System initialized.",
+)
 def initialize_system(data: UserCreate, db: Session = Depends(get_db)):
     if user_repo.has_any(db):
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="System already initialized")

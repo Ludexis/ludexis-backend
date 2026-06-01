@@ -11,7 +11,13 @@ router = APIRouter(prefix="/permissions", tags=["permissions"])
 permission_repo = PermissionRepository()
 
 
-@router.get("/", response_model=list[PermissionRead])
+@router.get(
+    "/",
+    response_model=list[PermissionRead],
+    summary="List permissions",
+    description="Return all permissions.",
+    response_description="Permissions retrieved.",
+)
 def list_permissions(
     current_user=Depends(require_permission(PermissionName.MANAGE_USERS)),
     db: Session = Depends(get_db),
@@ -19,7 +25,14 @@ def list_permissions(
     return permission_repo.list_items(db)
 
 
-@router.post("/", response_model=PermissionRead, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/",
+    response_model=PermissionRead,
+    status_code=status.HTTP_201_CREATED,
+    summary="Create permission",
+    description="Create a new permission.",
+    response_description="Permission created.",
+)
 def create_permission(
     data: PermissionCreate,
     current_user=Depends(require_permission(PermissionName.MANAGE_USERS)),
@@ -33,7 +46,13 @@ def create_permission(
     return permission_repo.create(db, {"name": data.name, "description": data.description})
 
 
-@router.get("/{permission_id}", response_model=PermissionRead)
+@router.get(
+    "/{permission_id}",
+    response_model=PermissionRead,
+    summary="Get permission",
+    description="Return a permission by ID.",
+    response_description="Permission retrieved.",
+)
 def read_permission(
     permission_id: str,
     current_user=Depends(require_permission(PermissionName.MANAGE_USERS)),
