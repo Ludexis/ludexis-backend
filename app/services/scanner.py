@@ -2,6 +2,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterable
 from datetime import datetime, timezone
+import hashlib
 
 from app.core.config import settings
 from app.models.archive_entry import ArchiveEntry
@@ -29,6 +30,7 @@ class ArchiveScanItem:
     release_group: str | None = None
     file_size: int | None = None
     modified_time: datetime | None = None
+    file_hash: str | None = None
 
 
 class ScannerService:
@@ -36,6 +38,15 @@ class ScannerService:
         self.repo = ArchiveEntryRepository()
         self.library_repo = LibraryRepository()
         self.matcher = MatchingService()
+
+    def _compute_file_hash(self, path: Path) -> str:
+        sha256 = hashlib.sha256()
+
+        with open(path, "rb") as f:
+            while chunk := f.read(1024 * 1024):
+                sha256.update(chunk)
+
+        return sha256.hexdigest()
 
     def _needs_processing(
         self,
@@ -143,6 +154,7 @@ class ScannerService:
 
     def _scan_file(self, path: Path) -> ArchiveScanItem:
         stat = path.stat()
+        file_hash = self._compute_file_hash(path)
         parsed = parse_archive_name(path.name)
         file_size = stat.st_size
         modified_time = datetime.fromtimestamp(stat.st_mtime, tz=timezone.utc,)
@@ -158,6 +170,7 @@ class ScannerService:
             release_group=parsed.release_group,
             file_size=file_size,
             modified_time=modified_time,
+            file_hash=file_hash,
         )
 
     def _scan_folder(self, path: Path) -> ArchiveScanItem:
@@ -188,19 +201,20 @@ class ScannerService:
             )
 
             if existing_by_path:
-
                 if (
                     existing_by_path.file_size is None
                     or
                     existing_by_path.modified_time is None
+                    or
+                    existing_by_path.file_hash is None
                 ):
-
                     self.repo.update(
                         db,
                         existing_by_path,
                         {
                             "file_size": item.file_size,
                             "modified_time": item.modified_time,
+                            "file_hash": item.file_hash,
                         },
                     )
 
@@ -240,6 +254,7 @@ class ScannerService:
                 "library_id": library_id,
                 "file_size": item.file_size,
                 "modified_time": item.modified_time,
+                "file_hash": item.file_hash,
             })
             stats["created"] += 1
             if metadata_status == MetadataStatus.MATCHED:
