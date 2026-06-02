@@ -28,6 +28,9 @@ class ArchiveEntryBase(BaseModel):
     release_date: date | None = None
     archive_type: str | None = None
     file_path: str
+    file_size: int | None = None
+    modified_time: str | None = None
+    file_hash: str | None = None
     storage_device: str | None = None
     cover_path: str | None = None
     banner_path: str | None = None

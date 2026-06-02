@@ -1,6 +1,7 @@
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterable
+from datetime import datetime, timezone
 
 from app.core.config import settings
 from app.models.archive_entry import ArchiveEntry
@@ -26,6 +27,8 @@ class ArchiveScanItem:
     version: str | None
     archive_type: str
     release_group: str | None = None
+    file_size: int | None = None
+    modified_time: datetime | None = None
 
 
 class ScannerService:
@@ -33,6 +36,26 @@ class ScannerService:
         self.repo = ArchiveEntryRepository()
         self.library_repo = LibraryRepository()
         self.matcher = MatchingService()
+
+    def _needs_processing(
+        self,
+        item: ArchiveScanItem,
+        existing_entries: dict,
+    ) -> bool:
+
+        existing = existing_entries.get(item.file_path)
+
+        if existing is None:
+            return True
+
+        if (
+            existing.file_size != item.file_size
+            or
+            existing.modified_time != item.modified_time
+        ):
+            return True
+
+        return False
 
     def scan_full(self, db: Session, scan_root: str | None = None, ) -> dict[str, int]:
         if scan_root:
@@ -59,18 +82,24 @@ class ScannerService:
                 stats[key] += library_stats[key]
         return stats
 
-    def scan_incremental(self, db: Session, scan_root: str | None = None, ) -> dict[str, int]:
-        existing_paths = {
-            entry.file_path
+    def scan_incremental(self, db: Session, scan_root: str | None = None,) -> dict[str, int]:
+        existing_entries = {
+            entry.file_path: entry
             for entry in self.repo.list_all(db)
         }
         if scan_root:
             items = [
                 item
                 for item in self._discover_items(Path(scan_root))
-                if item.file_path not in existing_paths
+                if self._needs_processing(
+                    item,
+                    existing_entries,
+                )
             ]
-            return self._process_items(db, items)
+            return self._process_items(
+                db,
+                items,
+            )
         libraries = self.library_repo.list_active(db)
         stats = {
             "created": 0,
@@ -83,8 +112,13 @@ class ScannerService:
                 continue
             items = [
                 item
-                for item in self._discover_items(Path(library.path))
-                if item.file_path not in existing_paths
+                for item in self._discover_items(
+                    Path(library.path)
+                )
+                if self._needs_processing(
+                    item,
+                    existing_entries,
+                )
             ]
             library_stats = self._process_items(
                 db,
@@ -108,20 +142,22 @@ class ScannerService:
         return items
 
     def _scan_file(self, path: Path) -> ArchiveScanItem:
+        stat = path.stat()
         parsed = parse_archive_name(path.name)
+        file_size = stat.st_size
+        modified_time = datetime.fromtimestamp(stat.st_mtime, tz=timezone.utc,)
 
         return ArchiveScanItem(
             file_path=str(path.resolve()),
             filename=path.name,
             archive_name=path.stem,
             folder_name=path.parent.name if path.parent != path else None,
-
             title=parsed.title,
             version=parsed.version,
-
             archive_type=parsed.archive_type or path.suffix.lstrip(".").upper(),
-
             release_group=parsed.release_group,
+            file_size=file_size,
+            modified_time=modified_time,
         )
 
     def _scan_folder(self, path: Path) -> ArchiveScanItem:
@@ -139,12 +175,35 @@ class ScannerService:
             archive_type=SUPPORTED_FOLDER_TYPE,
 
             release_group=parsed.release_group,
+            file_size=None,
+            modified_time=None,
         )
 
     def _process_items(self, db: Session, items: Iterable[ArchiveScanItem], library_id: str | None = None,) -> dict[str, int]:
         stats = {"created": 0, "matched": 0, "partial": 0, "unmatched": 0}
         for item in items:
-            if self.repo.get_by_file_path(db, item.file_path):
+            existing_by_path = self.repo.get_by_file_path(
+                db,
+                item.file_path,
+            )
+
+            if existing_by_path:
+
+                if (
+                    existing_by_path.file_size is None
+                    or
+                    existing_by_path.modified_time is None
+                ):
+
+                    self.repo.update(
+                        db,
+                        existing_by_path,
+                        {
+                            "file_size": item.file_size,
+                            "modified_time": item.modified_time,
+                        },
+                    )
+
                 continue
             existing = self.repo.get_by_title_and_version(
             db,
@@ -179,6 +238,8 @@ class ScannerService:
                 "parent_series_id": None,
                 "franchise_id": None,
                 "library_id": library_id,
+                "file_size": item.file_size,
+                "modified_time": item.modified_time,
             })
             stats["created"] += 1
             if metadata_status == MetadataStatus.MATCHED:
