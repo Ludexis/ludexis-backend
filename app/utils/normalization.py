@@ -9,15 +9,26 @@ KNOWN_RELEASE_GROUPS = {
     "SKIDROW",
     "FITGIRL",
     "DODI",
+    "ELAMIGOS",
+    "XATAB",
+    "STEAMRIP",
+    "RG",
+    "MECHANICS",
 }
 
 KNOWN_FLAGS = {
     "BETA",
     "ALPHA",
     "MOD",
+    "MODDED",
     "REPACK",
     "PORTABLE",
     "DEMO",
+    "PATCH",
+    "HOTFIX",
+    "UPDATE",
+    "EARLY",
+    "ACCESS",
 }
 
 
@@ -35,6 +46,15 @@ def normalize_archive_name(name: str) -> str:
     )
     # Replace separators with spaces
     name = re.sub(r"[._\-]+", " ", name)
+    # Remove mod author tags such as:
+    # Fan mod
+    # XYZ Mod
+    name = re.sub(
+        r"\b\w+\s+mod\b",
+        "",
+        name,
+        flags=re.IGNORECASE,
+    )
     # Remove version/release markers
     name = re.sub(
         r"\b(?:rev|release|version|v)\s*\d+[A-Za-z0-9]*\b",
@@ -68,6 +88,12 @@ def normalize_archive_name(name: str) -> str:
             name,
             flags=re.IGNORECASE,
         )
+    name = re.sub(
+        r"\b(ultimate|gold|complete|definitive|enhanced|goty|edition)\b",
+        "",
+        name,
+        flags=re.IGNORECASE,
+    )
     # Cleanup whitespace
     name = re.sub(r"\s{2,}", " ", name)
     return name.strip().title()

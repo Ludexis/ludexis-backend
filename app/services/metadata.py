@@ -139,3 +139,52 @@ class MetadataService:
 
         prioritized = [self.provider_map[name] for name in preferred_providers if name in self.provider_map]
         return prioritized + [provider for provider in self.providers if provider.name not in {p.name for p in prioritized}]
+
+    def refresh_archive(self, db: Session, archive: ArchiveEntry,) -> bool:
+        if (
+            not archive.metadata_source
+            or
+            not archive.metadata_source_code
+        ):
+            return False
+
+        details = self.get_details(
+            archive.metadata_source,
+            archive.metadata_source_code,
+        )
+        if not details:
+            return False
+        if details.description:
+            archive.description = details.description
+        if details.release_date:
+            archive.release_date = details.release_date
+        archive.last_metadata_refresh = (
+            datetime.now(UTC)
+        )
+        db.add(archive)
+        db.commit()
+        return True
+    
+    def refresh_all(self, db: Session,) -> dict:
+        archives = (
+            db.query(ArchiveEntry)
+            .filter(
+                ArchiveEntry.metadata_status
+                == MetadataStatus.MATCHED
+            )
+            .all()
+        )
+        refreshed = 0
+        failed = 0
+        for archive in archives:
+            if self.refresh_archive(
+                db,
+                archive,
+            ):
+                refreshed += 1
+            else:
+                failed += 1
+        return {
+            "refreshed": refreshed,
+            "failed": failed,
+        }
