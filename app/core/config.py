@@ -13,6 +13,12 @@ class Settings(BaseSettings):
     DEBUG: bool = False
     API_PREFIX: str = "/api"
 
+    TWITCH_CLIENT_ID: str = ""
+    TWITCH_CLIENT_SECRET: str = ""
+
+    IGDB_TOKEN_URL: str = "https://id.twitch.tv/oauth2/token"
+    IGDB_API_URL: str = "https://api.igdb.com/v4"
+
     DATABASE_URL: PostgresDsn = "postgresql+psycopg://ludexis:ludexis@db:5432/ludexis"
     REDIS_URL: RedisDsn = "redis://localhost:6379/0"
     CELERY_BROKER_URL: RedisDsn = "redis://localhost:6379/0"

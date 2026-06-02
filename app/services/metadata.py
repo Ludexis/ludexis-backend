@@ -1,5 +1,9 @@
 from typing import Iterable
-
+from difflib import SequenceMatcher
+from datetime import UTC, datetime
+from sqlalchemy.orm import Session
+from app.models.archive_entry import ArchiveEntry
+from app.utils.enums import MetadataStatus
 from app.providers import GOGProvider, IGDBProvider, ManualProvider, SteamProvider
 from app.providers.metadata_provider import MetadataProvider
 from app.schemas.metadata import MetadataDetails, MetadataSearchResult
@@ -15,6 +19,82 @@ class MetadataService:
         ]
         self.providers.sort(key=lambda provider: provider.priority)
         self.provider_map = {provider.name: provider for provider in self.providers}
+
+    def auto_match(self, title: str, ) -> tuple[MetadataSearchResult | None, float]:
+        results = self.search(
+            title,
+            preferred_providers=["IGDB"],
+            limit=20,
+        )
+        if not results:
+            return None, 0.0
+        best_result = None
+        best_score = 0.0
+        for result in results:
+            score = SequenceMatcher(
+                None,
+                title.lower(),
+                result.title.lower(),
+            ).ratio()
+            result.score = score
+            if score > best_score:
+                best_score = score
+                best_result = result
+        return best_result, best_score
+    
+    def auto_match_archive(self, db: Session, archive: ArchiveEntry, ) -> bool:
+        match, score = self.auto_match(
+            archive.title,
+        )
+        if match is None:
+            archive.metadata_status = (
+                MetadataStatus.UNMATCHED
+            )
+            archive.last_metadata_refresh = (
+                datetime.now(UTC)
+            )
+            db.add(archive)
+            db.commit()
+            return False
+        if score >= 0.85:
+            archive.metadata_status = (
+                MetadataStatus.MATCHED
+            )
+        elif score >= 0.70:
+            archive.metadata_status = (
+                MetadataStatus.PARTIAL
+            )
+        else:
+            archive.metadata_status = (
+                MetadataStatus.UNMATCHED
+            )
+        archive.metadata_source = (
+            match.provider
+        )
+        archive.metadata_source_code = (
+            match.provider_id
+        )
+        details = self.get_details(
+            match.provider,
+            match.provider_id,
+        )
+        if details:
+
+            if details.description:
+                archive.description = (
+                    details.description
+                )
+
+            if details.release_date:
+                archive.release_date = (
+                    details.release_date
+                )
+        archive.last_metadata_refresh = (
+            datetime.now(UTC)
+        )
+        db.add(archive)
+        db.commit()
+        return (archive.metadata_status!= MetadataStatus.UNMATCHED)
 
     def search(self, query: str, preferred_providers: list[str] | None = None, limit: int = 20) -> list[MetadataSearchResult]:
         providers = self._get_providers(preferred_providers)

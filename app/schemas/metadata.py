@@ -9,7 +9,7 @@ class MetadataSearchResult(BaseModel):
     title: str
     summary: str | None = None
     release_date: date | None = None
-
+    score: float | None = None
 
 class MetadataDetails(BaseModel):
     provider: str
