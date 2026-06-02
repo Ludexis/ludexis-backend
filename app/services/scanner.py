@@ -47,26 +47,57 @@ class ScannerService:
                 sha256.update(chunk)
 
         return sha256.hexdigest()
+    
+    def _verify_archive(self, db: Session, archive: ArchiveEntry, ) -> VerificationStatus:
+        path = Path(archive.file_path)
+        if not path.exists():
+            return VerificationStatus.MISSING
+        current_hash = self._compute_file_hash(path)
+        if archive.file_hash != current_hash:
+            return VerificationStatus.CORRUPTED
+        return VerificationStatus.VERIFIED
 
-    def _needs_processing(
-        self,
-        item: ArchiveScanItem,
-        existing_entries: dict,
-    ) -> bool:
-
+    def _needs_processing(self, item: ArchiveScanItem, existing_entries: dict, ) -> bool:
         existing = existing_entries.get(item.file_path)
-
         if existing is None:
             return True
-
         if (
             existing.file_size != item.file_size
             or
             existing.modified_time != item.modified_time
         ):
             return True
-
         return False
+    
+    def verify_archives(self, db: Session, ) -> dict[str, int]:
+        stats = {
+            "verified": 0,
+            "missing": 0,
+            "corrupted": 0,
+        }
+        archives = self.repo.list_all(db)
+        for archive in archives:
+            status = self._verify_archive(
+                db,
+                archive,
+            )
+            self.repo.update(
+                db,
+                archive,
+                {
+                    "verification_status": status,
+                    "last_verified": datetime.now(
+                        timezone.utc,
+                    ),
+                },
+            )
+            if status == VerificationStatus.VERIFIED:
+                stats["verified"] += 1
+            elif status == VerificationStatus.MISSING:
+                stats["missing"] += 1
+            elif status == VerificationStatus.CORRUPTED:
+                stats["corrupted"] += 1
+        return stats
 
     def scan_full(self, db: Session, scan_root: str | None = None, ) -> dict[str, int]:
         if scan_root:
@@ -219,6 +250,25 @@ class ScannerService:
                     )
 
                 continue
+
+            existing_by_hash = None
+            if item.file_hash:
+                existing_by_hash = self.repo.get_by_hash(
+                    db,
+                    item.file_hash,
+                )
+            if existing_by_hash:
+                self.repo.update(
+                    db,
+                    existing_by_hash,
+                    {
+                        "file_path": item.file_path,
+                        "file_size": item.file_size,
+                        "modified_time": item.modified_time,
+                    },
+                )
+                continue
+
             existing = self.repo.get_by_title_and_version(
             db,
             item.title,

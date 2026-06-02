@@ -31,6 +31,9 @@ class ArchiveEntryRepository(BaseRepository[ArchiveEntry]):
     def get_by_file_path(self, db: Session, file_path: str) -> ArchiveEntry | None:
         return db.query(ArchiveEntry).filter(ArchiveEntry.file_path == file_path, ArchiveEntry.deleted_at.is_(None)).one_or_none()
 
+    def get_by_hash(self, db: Session, file_hash: str, ) -> ArchiveEntry | None:
+        return (db.query(ArchiveEntry).filter(ArchiveEntry.file_hash == file_hash, ArchiveEntry.deleted_at.is_(None),).one_or_none())
+    
     def get_by_title(self, db: Session, title: str) -> ArchiveEntry | None:
         return db.query(ArchiveEntry).filter(sa.func.lower(ArchiveEntry.title) == title.lower(), ArchiveEntry.deleted_at.is_(None)).one_or_none()
 
