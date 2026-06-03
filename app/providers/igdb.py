@@ -96,20 +96,24 @@ class IGDBProvider(MetadataProvider):
                 game["first_release_date"],
                 tz=UTC,
             ).date()
-
         genres = [
             genre["name"]
             for genre in game.get("genres", [])
             if genre.get("name")
         ]
-
         artwork_urls = []
-
         cover = game.get("cover")
 
         if cover and cover.get("url"):
-            artwork_urls.append(
+            url = (
                 "https:" + cover["url"]
+            )
+            url = url.replace(
+                "t_thumb",
+                "t_cover_big",
+            )
+            artwork_urls.append(
+                url
             )
 
         for artwork in game.get(
@@ -117,8 +121,15 @@ class IGDBProvider(MetadataProvider):
             [],
         ):
             if artwork.get("url"):
-                artwork_urls.append(
+                url = (
                     "https:" + artwork["url"]
+                )
+                url = url.replace(
+                    "t_thumb",
+                    "t_1080p",
+                )
+                artwork_urls.append(
+                    url
                 )
 
         developers = []

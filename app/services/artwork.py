@@ -85,6 +85,31 @@ class ArtworkService:
         )
         return contents, extension
     
+    def _score_artwork_url(self, url: str,) -> int:
+        url = url.lower()
+        score = 0
+        if "images.igdb.com" in url:
+            score += 50
+        if "t_cover_big" in url:
+            score += 100
+        if "t_1080p" in url:
+            score += 80
+        if "header" in url:
+            score += 40
+        if "capsule" in url:
+            score += 10
+        return score
+
+    def _select_best_cover(self, artwork_urls: list[str],) -> str | None:
+        if not artwork_urls:
+            return None
+        ranked = sorted(
+            artwork_urls,
+            key=self._score_artwork_url,
+            reverse=True,
+        )
+        return ranked[0]
+
     def auto_download_cover(self, db: Session, archive_entry_id: str, force: bool = False,) -> bool:
         entry = self.entry_repo.get_active(
             db,
@@ -116,8 +141,12 @@ class ArtworkService:
         ):
             return False
         artwork_url = (
-            details.artwork_urls[0]
+            self._select_best_cover(
+                details.artwork_urls
+            )
         )
+        if artwork_url is None:
+            return False
         contents, extension = (
             self._download_artwork_url(
                 artwork_url
