@@ -7,6 +7,7 @@ from app.utils.enums import MetadataStatus
 from app.providers import GOGProvider, IGDBProvider, ManualProvider, SteamProvider
 from app.providers.metadata_provider import MetadataProvider
 from app.schemas.metadata import MetadataDetails, MetadataSearchResult
+from app.services.metadata_conflict import MetadataConflictResolver
 
 from app.models.genre import Genre
 from app.models.developer import Developer
@@ -24,6 +25,7 @@ class MetadataService:
             GOGProvider(),
             ManualProvider(),
         ]
+        self.conflict_resolver = (MetadataConflictResolver())
         self.providers.sort(key=lambda provider: provider.priority)
         self.provider_map = {provider.name: provider for provider in self.providers}
         self.genre_repo = GenreRepository()
@@ -217,9 +219,8 @@ class MetadataService:
         ):
             return False
 
-        details = self.get_details(
-            archive.metadata_source,
-            archive.metadata_source_code,
+        details = self.get_merged_details(
+            archive.title
         )
         self._sync_genres(
             db,
@@ -276,3 +277,42 @@ class MetadataService:
             "refreshed": refreshed,
             "failed": failed,
         }
+    
+    def get_merged_details(
+        self,
+        title: str,
+    ) -> MetadataDetails | None:
+
+        match, score = self.auto_match(
+            title
+        )
+
+        if match is None:
+            return None
+
+        igdb_details = self.get_details(
+            match.provider,
+            match.provider_id,
+        )
+
+        if igdb_details is None:
+            return None
+
+        steam_results = SteamProvider().search(
+            title,
+            limit=1,
+        )
+
+        steam_details = None
+
+        if steam_results:
+            steam_details = (
+                SteamProvider().get_details(
+                    steam_results[0].provider_id
+                )
+            )
+
+        return self.conflict_resolver.resolve(
+            igdb_details,
+            steam_details,
+        )

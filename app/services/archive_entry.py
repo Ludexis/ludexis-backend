@@ -1,5 +1,5 @@
 from sqlalchemy.orm import Session
-
+from app.utils.enums import MetadataStatus
 from app.models.archive_entry import ArchiveEntry
 from app.repositories.archive_entry import ArchiveEntryRepository
 from app.repositories.collection import CollectionRepository
@@ -40,23 +40,23 @@ class ArchiveEntryService:
     def delete(self, db: Session, entry: ArchiveEntry) -> ArchiveEntry:
         return self.repo.delete(db, entry)
     
-    def update_metadata(self, db, archive, payload,):
+    def update_metadata(self, db: Session, archive: ArchiveEntry, payload,) -> ArchiveEntry:
         if payload.title is not None:
             archive.title = payload.title
-
         if payload.description is not None:
             archive.description = payload.description
-
         if payload.release_date is not None:
             archive.release_date = payload.release_date
-
         archive.metadata_override = (
             payload.metadata_override
         )
-
         archive.metadata_status = (
             MetadataStatus.MANUAL
         )
+        db.add(archive)
+        db.commit()
+        db.refresh(archive)
+        return archive
 
     def _assign_relations(self, db: Session, entry: ArchiveEntry, data: ArchiveEntryCreate | ArchiveEntryUpdate) -> None:
         if hasattr(data, "tag_ids"):

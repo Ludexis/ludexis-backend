@@ -1,5 +1,4 @@
-from datetime import date
-
+from datetime import date, datetime
 from pydantic import BaseModel, computed_field
 
 from app.schemas.base import TimestampedModel
@@ -29,7 +28,6 @@ class ArchiveEntryBase(BaseModel):
     archive_type: str | None = None
     file_path: str
     file_size: int | None = None
-    modified_time: str | None = None
     file_hash: str | None = None
     storage_device: str | None = None
     cover_path: str | None = None
@@ -38,12 +36,14 @@ class ArchiveEntryBase(BaseModel):
     metadata_status: MetadataStatus = MetadataStatus.UNMATCHED
     metadata_source: str | None = None
     metadata_source_code: str | None = None
-    last_metadata_refresh: str | None = None
-    last_verified: str | None = None
+    metadata_override: bool = False
     verification_status: VerificationStatus = VerificationStatus.UNKNOWN
     parent_series_id: str | None = None
     franchise_id: str | None = None
     related_entry_ids: list[str] = []
+    modified_time: datetime | None = None
+    last_metadata_refresh: datetime | None = None
+    last_verified: datetime | None = None
 
 
 class ArchiveEntryCreate(ArchiveEntryBase):
@@ -102,7 +102,6 @@ class ArchiveEntryUpdate(BaseModel):
     publisher_ids: list[str] | None = None
     collection_ids: list[str] | None = None
     related_entry_ids: list[str] | None = None
-    metadata_override: bool = True
 
     model_config = {
         "json_schema_extra": {
@@ -115,6 +114,14 @@ class ArchiveEntryUpdate(BaseModel):
             ],
         },
     }
+
+
+class ArchiveMetadataUpdate(BaseModel):
+    title: str | None = None
+    description: str | None = None
+    release_date: date | None = None
+
+    metadata_override: bool = True
 
 
 class ArchiveEntryRead(ArchiveEntryBase, TimestampedModel):

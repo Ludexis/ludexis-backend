@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session
 
 from app.core.auth import get_current_active_user, require_permission
 from app.db.session import get_db
-from app.schemas.archive_entry import ArchiveEntryCreate, ArchiveEntryRead, ArchiveEntryUpdate
+from app.schemas.archive_entry import ArchiveEntryCreate, ArchiveEntryRead, ArchiveEntryUpdate, ArchiveMetadataUpdate
 from app.services.archive_entry import ArchiveEntryService
 from app.services.audit import AuditService
 from app.utils.enums import PermissionName
@@ -105,6 +105,50 @@ def update_archive_entry(
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
 
+@router.patch(
+    "/{archive_entry_id}/metadata",
+    response_model=ArchiveEntryRead,
+    summary="Override archive metadata",
+    description="Manually override archive metadata and prevent automatic metadata refresh.",
+    response_description="Archive metadata overridden.",
+)
+def override_archive_metadata(
+    archive_entry_id: str,
+    data: ArchiveMetadataUpdate,
+    current_user=Depends(
+        require_permission(
+            PermissionName.EDIT_METADATA
+        )
+    ),
+    db: Session = Depends(get_db),
+):
+    entry = service.get(
+        db,
+        archive_entry_id,
+    )
+
+    if entry is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Archive entry not found",
+        )
+
+    updated = service.update_metadata(
+        db,
+        entry,
+        data,
+    )
+
+    audit_service.record(
+        db,
+        current_user,
+        action="MANUAL_METADATA_OVERRIDE",
+        entity="ArchiveEntry",
+        entity_id=updated.id,
+        details=f"Manual metadata override for {updated.title}",
+    )
+
+    return updated
 
 @router.delete(
     "/{archive_entry_id}",
