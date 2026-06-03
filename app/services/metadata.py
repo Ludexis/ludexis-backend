@@ -8,6 +8,13 @@ from app.providers import GOGProvider, IGDBProvider, ManualProvider, SteamProvid
 from app.providers.metadata_provider import MetadataProvider
 from app.schemas.metadata import MetadataDetails, MetadataSearchResult
 
+from app.models.genre import Genre
+from app.models.developer import Developer
+from app.models.publisher import Publisher
+
+from app.repositories.genre import GenreRepository
+from app.repositories.developer import DeveloperRepository
+from app.repositories.publisher import PublisherRepository
 
 class MetadataService:
     def __init__(self, providers: list[MetadataProvider] | None = None) -> None:
@@ -19,6 +26,64 @@ class MetadataService:
         ]
         self.providers.sort(key=lambda provider: provider.priority)
         self.provider_map = {provider.name: provider for provider in self.providers}
+        self.genre_repo = GenreRepository()
+        self.developer_repo = DeveloperRepository()
+        self.publisher_repo = PublisherRepository()
+
+    def _sync_genres(self, db, archive, genres: list[str],):
+        archive.genres.clear()
+        for name in genres:
+            genre = self.genre_repo.get_by_name(
+                db,
+                name,
+            )
+            if genre is None:
+                genre = Genre(
+                    name=name,
+                )
+                db.add(genre)
+                db.flush()
+            archive.genres.append(
+                genre
+            )
+
+    def _sync_developers(self, db, archive, developers: list[str],):
+        archive.developers.clear()
+        for name in developers:
+            developer = (
+                self.developer_repo.get_by_name(
+                    db,
+                    name,
+                )
+            )
+            if developer is None:
+                developer = Developer(
+                    name=name,
+                )
+                db.add(developer)
+                db.flush()
+            archive.developers.append(
+                developer
+            )
+
+    def _sync_publishers(self, db, archive, publishers: list[str],):
+        archive.publishers.clear()
+        for name in publishers:
+            publisher = (
+                self.publisher_repo.get_by_name(
+                    db,
+                    name,
+                )
+            )
+            if publisher is None:
+                publisher = Publisher(
+                    name=name,
+                )
+                db.add(publisher)
+                db.flush()
+            archive.publishers.append(
+                publisher
+            )
 
     def auto_match(self, title: str, ) -> tuple[MetadataSearchResult | None, float]:
         results = self.search(
@@ -151,6 +216,23 @@ class MetadataService:
         details = self.get_details(
             archive.metadata_source,
             archive.metadata_source_code,
+        )
+        self._sync_genres(
+            db,
+            archive,
+            details.genres,
+        )
+
+        self._sync_developers(
+            db,
+            archive,
+            details.developers,
+        )
+
+        self._sync_publishers(
+            db,
+            archive,
+            details.publishers,
         )
         if not details:
             return False
