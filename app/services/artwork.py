@@ -3,6 +3,7 @@ import requests
 from fastapi import UploadFile
 from sqlalchemy.orm import Session
 from PIL import Image
+import hashlib
 
 from app.core.config import settings
 from app.models.archive_entry import ArchiveEntry
@@ -574,10 +575,17 @@ class ArtworkService:
                     corrupt_types.append(
                         artwork_type.value
                     )
-            if len(entry.screenshots) == 0:
-                missing_types.append(
-                    ArtworkType.SCREENSHOT.value
+            if (
+                hasattr(
+                    entry,
+                    "screenshots",
                 )
+                and
+                len(
+                    entry.screenshots
+                ) == 0
+            ):
+                pass
             if (
                 missing_types
                 or
@@ -695,3 +703,272 @@ class ArtworkService:
         except Exception:
             return 0
         return score
+
+    def _file_sha256(self, relative_path: str,) -> str | None:
+        if not relative_path:
+            return None
+        if not self.storage.exists(
+            relative_path
+        ):
+            return None
+        path = (
+            self.storage.absolute_path(
+                relative_path
+            )
+        )
+        digest = hashlib.sha256()
+        with open(
+            path,
+            "rb",
+        ) as handle:
+            while chunk := handle.read(
+                8192
+            ):
+                digest.update(
+                    chunk
+                )
+        return digest.hexdigest()
+    
+    def find_duplicate_artwork(self, db,) -> list[dict]:
+        hashes = {}
+        archives = (
+            db.query(
+                ArchiveEntry
+            )
+            .all()
+        )
+        for archive in archives:
+            for asset_type, asset_path in (
+                (
+                    "cover",
+                    archive.cover_path,
+                ),
+                (
+                    "banner",
+                    archive.banner_path,
+                ),
+                (
+                    "logo",
+                    archive.logo_path,
+                ),
+            ):
+                
+                if not asset_path:
+                    continue
+
+                if asset_path.startswith(
+                    "dedup/"
+                ):
+                    continue
+
+                file_hash = (
+                    self._file_sha256(
+                        asset_path
+                    )
+                )
+                if not file_hash:
+                    continue
+                hashes.setdefault(
+                    (
+                        file_hash,
+                        asset_type,
+                    ),
+                    [],
+                ).append(
+                    {
+                        "archive_id": archive.id,
+                        "title": archive.title,
+                        "type": asset_type,
+                        "path": asset_path,
+                    }
+                )
+        duplicates = []
+        for (
+            file_hash,
+            asset_type,
+        ), assets in (
+            hashes.items()
+        ):
+            if len(
+                assets
+            ) <= 1:
+                continue
+            archive_ids = {
+                asset["archive_id"]
+                for asset in assets
+            }
+            if len(
+                archive_ids
+            ) < 2:
+                continue
+            duplicates.append(
+                {
+                    "hash": file_hash,
+                    "count": len(
+                        assets
+                    ),
+                    "assets": assets,
+                }
+            )
+        return duplicates
+
+    def _canonical_artwork_path(self, file_hash: str, asset_type: str,) -> str:
+        return (
+            f"dedup/"
+            f"{asset_type}/"
+            f"{file_hash}.jpg"
+        )
+    
+    def deduplicate_artwork(self, db,) -> dict:
+        duplicates = (
+            self.find_duplicate_artwork(
+                db
+            )
+        )
+        deduplicated = 0
+        for group in duplicates:
+            file_hash = (
+                group["hash"]
+            )
+            asset_type = (
+                group["assets"][0]["type"]
+            )
+            canonical_path = (
+                self._canonical_artwork_path(
+                    file_hash,
+                    asset_type,
+                )
+            )
+            first_asset = (
+                group["assets"][0]
+            )
+            source_path = (
+                first_asset["path"]
+            )
+            if not self.storage.exists(
+                canonical_path
+            ):
+                contents = (
+                    self.storage
+                    .absolute_path(
+                        source_path
+                    )
+                    .read_bytes()
+                )
+                self.storage.save(
+                    canonical_path,
+                    contents,
+                )
+            for asset in (
+                group["assets"]
+            ):
+                archive = (
+                    db.query(
+                        ArchiveEntry
+                    )
+                    .filter(
+                        ArchiveEntry.id
+                        == asset[
+                            "archive_id"
+                        ]
+                    )
+                    .first()
+                )
+                if (
+                    asset["type"]
+                    == "cover"
+                ):
+                    archive.cover_path = (
+                        canonical_path
+                    )
+                elif (
+                    asset["type"]
+                    == "banner"
+                ):
+                    archive.banner_path = (
+                        canonical_path
+                    )
+                elif (
+                    asset["type"]
+                    == "logo"
+                ):
+                    archive.logo_path = (
+                        canonical_path
+                    )
+                deduplicated += 1
+            db.add(
+                archive
+            )
+        db.commit()
+        return {
+            "deduplicated":
+            deduplicated,
+        }
+    
+    def garbage_collect_artwork(self, db,) -> dict:
+        referenced = set()
+        archives = (
+            db.query(
+                ArchiveEntry
+            )
+            .all()
+        )
+        for archive in archives:
+            for asset_path in (
+                archive.cover_path,
+                archive.banner_path,
+                archive.logo_path,
+            ):
+                if asset_path:
+                    referenced.add(
+                        asset_path
+                    )
+        deleted = 0
+        kept = 0
+        covers_dir = (
+            self.storage.absolute_path(
+                "covers"
+            )
+        )
+        banners_dir = (
+            self.storage.absolute_path(
+                "banners"
+            )
+        )
+        logos_dir = (
+            self.storage.absolute_path(
+                "logos"
+            )
+        )
+        for directory in (
+            covers_dir,
+            banners_dir,
+            logos_dir,
+        ):
+            if not directory.exists():
+                continue
+            for file_path in directory.rglob(
+                "*"
+            ):
+                if not file_path.is_file():
+                    continue
+                relative_path = str(
+                    file_path.relative_to(
+                        self.storage.base_dir
+                    )
+                ).replace(
+                    "\\",
+                    "/",
+                )
+                if (
+                    relative_path
+                    in referenced
+                ):
+                    kept += 1
+                    continue
+                file_path.unlink()
+                deleted += 1
+        return {
+            "deleted": deleted,
+            "kept": kept,
+        }
