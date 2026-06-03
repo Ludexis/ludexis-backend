@@ -21,4 +21,7 @@ class MetadataDetails(BaseModel):
     developers: list[str] = []
     publishers: list[str] = []
     tags: list[str] = []
+    cover_urls: list[str] = []
+    banner_urls: list[str] = []
+    logo_urls: list[str] = []
     artwork_urls: list[str] = []

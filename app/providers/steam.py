@@ -73,24 +73,40 @@ class SteamProvider(MetadataProvider):
                 []
             )
         )
+
         publishers = (
             data.get(
                 "publishers",
                 []
             )
         )
-        artwork = []
 
-        for key in (
-            "header_image",
-            "capsule_image",
-            "capsule_imagev5",
-        ):
+        cover_urls = []
+        banner_urls = []
+        logo_urls = []
+        artwork_urls = []
 
-            url = data.get(key)
-
-            if url:
-                artwork.append(url)
+        header = data.get(
+            "header_image"
+        )
+        if header:
+            banner_urls.append(
+                header
+            )
+        capsule = data.get(
+            "capsule_image"
+        )
+        if capsule:
+            logo_urls.append(
+                capsule
+            )
+        capsule_v5 = data.get(
+            "capsule_imagev5"
+        )
+        if capsule_v5:
+            logo_urls.append(
+                capsule_v5
+            )
 
         release_date = None
         try:
@@ -124,7 +140,10 @@ class SteamProvider(MetadataProvider):
             developers=developers,
             publishers=publishers,
             tags=[],
-            artwork_urls=artwork,
+            cover_urls=cover_urls,
+            banner_urls=banner_urls,
+            logo_urls=logo_urls,
+            artwork_urls=artwork_urls,
             release_date=release_date,
         )
 

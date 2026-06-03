@@ -101,7 +101,12 @@ class IGDBProvider(MetadataProvider):
             for genre in game.get("genres", [])
             if genre.get("name")
         ]
+
+        cover_urls = []
+        banner_urls = []
+        logo_urls = []
         artwork_urls = []
+
         cover = game.get("cover")
 
         if cover and cover.get("url"):
@@ -112,7 +117,7 @@ class IGDBProvider(MetadataProvider):
                 "t_thumb",
                 "t_cover_big",
             )
-            artwork_urls.append(
+            cover_urls.append(
                 url
             )
 
@@ -159,6 +164,9 @@ class IGDBProvider(MetadataProvider):
             developers=developers,
             publishers=publishers,
             tags=[],
+            cover_urls=cover_urls,
+            banner_urls=banner_urls,
+            logo_urls=logo_urls,
             artwork_urls=artwork_urls,
         )
 

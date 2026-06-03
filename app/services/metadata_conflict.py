@@ -45,6 +45,27 @@ class MetadataConflictResolver:
                 secondary.tags,
             ),
 
+            cover_urls=list(
+                dict.fromkeys(
+                    primary.cover_urls
+                    + secondary.cover_urls
+                )
+            ),
+
+            banner_urls=list(
+                dict.fromkeys(
+                    primary.banner_urls
+                    + secondary.banner_urls
+                )
+            ),
+
+            logo_urls=list(
+                dict.fromkeys(
+                    primary.logo_urls
+                    + secondary.logo_urls
+                )
+            ),
+
             artwork_urls=list(
                 dict.fromkeys(
                     secondary.artwork_urls

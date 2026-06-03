@@ -100,11 +100,11 @@ class ArtworkService:
             score += 10
         return score
 
-    def _select_best_cover(self, artwork_urls: list[str],) -> str | None:
-        if not artwork_urls:
+    def _select_best_url(self, urls: list[str],) -> str | None:
+        if not urls:
             return None
         ranked = sorted(
-            artwork_urls,
+            urls,
             key=self._score_artwork_url,
             reverse=True,
         )
@@ -137,12 +137,13 @@ class ArtworkService:
         if (
             details is None
             or
-            not details.artwork_urls
+            not details.cover_urls
         ):
             return False
+
         artwork_url = (
-            self._select_best_cover(
-                details.artwork_urls
+            self._select_best_url(
+                details.cover_urls
             )
         )
         if artwork_url is None:
@@ -180,6 +181,138 @@ class ArtworkService:
         db.refresh(entry)
         return True
 
+    def auto_download_banner(self, db: Session, archive_entry_id: str, force: bool = False,) -> bool:
+        entry = self.entry_repo.get_active(
+            db,
+            archive_entry_id,
+        )
+        if entry is None:
+            return False
+        if (
+            entry.banner_path
+            and
+            self.storage.exists(
+                entry.banner_path
+            )
+            and
+            not force
+        ):
+            return True
+        details = (
+            self.metadata_service
+            .get_merged_details(
+                entry.title
+            )
+        )
+        if (
+            details is None
+            or
+            not details.banner_urls
+        ):
+            return False
+        artwork_url = (
+            self._select_best_url(
+                details.banner_urls
+            )
+        )
+        if artwork_url is None:
+            return False
+        contents, extension = (
+            self._download_artwork_url(
+                artwork_url
+            )
+        )
+        relative_path = (
+            f"banners/"
+            f"{entry.id}"
+            f"{extension}"
+        )
+        stored_path = (
+            self.storage.save(
+                relative_path,
+                contents,
+            )
+        )
+        if (
+            entry.banner_path
+            and
+            entry.banner_path != stored_path
+        ):
+            self.storage.delete(
+                entry.banner_path
+            )
+        entry.banner_path = stored_path
+        db.add(entry)
+        db.commit()
+        db.refresh(entry)
+        return True
+
+    def auto_download_logo(self, db: Session, archive_entry_id: str, force: bool = False,) -> bool:
+        entry = self.entry_repo.get_active(
+            db,
+            archive_entry_id,
+        )
+        if entry is None:
+            return False
+        if (
+            entry.logo_path
+            and
+            self.storage.exists(
+                entry.logo_path
+            )
+            and
+            not force
+        ):
+            return True
+        details = (
+            self.metadata_service
+            .get_merged_details(
+                entry.title
+            )
+        )
+        if (
+            details is None
+            or
+            not details.logo_urls
+        ):
+            return False
+        artwork_url = (
+            self._select_best_url(
+                details.logo_urls
+            )
+        )
+        if artwork_url is None:
+            return False
+        contents, extension = (
+            self._download_artwork_url(
+                artwork_url
+            )
+        )
+        relative_path = (
+            f"logos/"
+            f"{entry.id}"
+            f"{extension}"
+        )
+        stored_path = (
+            self.storage.save(
+                relative_path,
+                contents,
+            )
+        )
+        if (
+            entry.logo_path
+            and
+            entry.logo_path != stored_path
+        ):
+            self.storage.delete(
+                entry.logo_path
+            )
+        entry.logo_path = stored_path
+        db.add(entry)
+        db.commit()
+        db.refresh(entry)
+        return True
+
     def auto_download_missing_artwork(self, db: Session,) -> dict:
         entries = (
             self.entry_repo
@@ -189,16 +322,28 @@ class ArtworkService:
         failed = 0
         for entry in entries:
             try:
-                if (
-                    not entry.cover_path
-                ):
+
+                if not entry.cover_path:
                     if self.auto_download_cover(
                         db,
                         entry.id,
                     ):
                         downloaded += 1
-                    else:
-                        failed += 1
+
+                if not entry.banner_path:
+                    if self.auto_download_banner(
+                        db,
+                        entry.id,
+                    ):
+                        downloaded += 1
+
+                if not entry.logo_path:
+                    if self.auto_download_logo(
+                        db,
+                        entry.id,
+                    ):
+                        downloaded += 1
+
             except Exception:
                 failed += 1
         return {
@@ -459,14 +604,51 @@ class ArtworkService:
             if not needs_repair:
                 continue
             try:
-                if self.auto_download_cover(
-                    db,
-                    item["archive_id"],
-                    force=True,
+
+                repaired_this_entry = False
+
+                if (
+                    "cover" in item["missing_types"]
+                    or
+                    "cover" in item["corrupt_types"]
                 ):
+                    repaired_this_entry |= (
+                        self.auto_download_cover(
+                            db,
+                            item["archive_id"],
+                            force=True,
+                        )
+                    )
+
+                if (
+                    "banner" in item["missing_types"]
+                    or
+                    "banner" in item["corrupt_types"]
+                ):
+                    repaired_this_entry |= (
+                        self.auto_download_banner(
+                            db,
+                            item["archive_id"],
+                            force=True,
+                        )
+                    )
+
+                if (
+                    "logo" in item["missing_types"]
+                    or
+                    "logo" in item["corrupt_types"]
+                ):
+                    repaired_this_entry |= (
+                        self.auto_download_logo(
+                            db,
+                            item["archive_id"],
+                            force=True,
+                        )
+                    )
+
+                if repaired_this_entry:
                     repaired += 1
-                else:
-                    failed += 1
+
             except Exception:
                 failed += 1
         return {
