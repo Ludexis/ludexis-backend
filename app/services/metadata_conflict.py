@@ -1,6 +1,7 @@
 from app.schemas.metadata import MetadataDetails
 
 class MetadataConflictResolver:
+    
     def resolve(self, primary: MetadataDetails, secondary: MetadataDetails | None = None,) -> MetadataDetails:
         if secondary is None:
             return primary
@@ -9,11 +10,14 @@ class MetadataConflictResolver:
             provider=primary.provider,
             provider_id=primary.provider_id,
 
-            title=primary.title or secondary.title,
+            title=self._pick_best_text(
+                primary.title,
+                secondary.title,
+            ),
 
-            description=(
-                primary.description
-                or secondary.description
+            description=self._pick_best_text(
+                primary.description,
+                secondary.description,
             ),
 
             release_date=(
@@ -21,30 +25,89 @@ class MetadataConflictResolver:
                 or secondary.release_date
             ),
 
-            genres=sorted(
-                set(primary.genres)
-                | set(secondary.genres)
+            genres=self._merge_unique(
+                primary.genres,
+                secondary.genres,
             ),
 
-            developers=sorted(
-                set(primary.developers)
-                | set(secondary.developers)
+            developers=self._merge_companies(
+                primary.developers,
+                secondary.developers,
             ),
 
-            publishers=sorted(
-                set(primary.publishers)
-                | set(secondary.publishers)
+            publishers=self._merge_companies(
+                primary.publishers,
+                secondary.publishers,
             ),
 
-            tags=sorted(
-                set(primary.tags)
-                | set(secondary.tags)
+            tags=self._merge_unique(
+                primary.tags,
+                secondary.tags,
             ),
 
             artwork_urls=list(
                 dict.fromkeys(
-                    primary.artwork_urls
-                    + secondary.artwork_urls
+                    secondary.artwork_urls
+                    + primary.artwork_urls
                 )
             ),
+        )
+    def _pick_best_text(
+        self,
+        primary: str | None,
+        secondary: str | None,
+    ) -> str | None:
+        return primary or secondary
+
+
+    def _merge_unique(
+        self,
+        primary: list[str],
+        secondary: list[str],
+    ) -> list[str]:
+        return sorted(
+            set(primary) | set(secondary)
+        )
+
+    def _normalize_company(
+        self,
+        name: str,
+    ) -> str:
+
+        name = name.strip()
+        replacements = {
+            "SEGA": "Sega",
+            "CREATIVE ASSEMBLY": "The Creative Assembly",
+            "Wube Software LTD.": "Wube Software",
+            "VALVE CORPORATION": "Valve",
+            "Valve Corporation": "Valve",
+        }
+
+        return replacements.get(
+            name,
+            name,
+        )
+    def _merge_companies(
+        self,
+        primary: list[str],
+        secondary: list[str],
+    ) -> list[str]:
+
+        companies = {}
+
+        for company in (
+            primary + secondary
+        ):
+            normalized = (
+                self._normalize_company(
+                    company
+                )
+            )
+
+            companies[
+                normalized.lower()
+            ] = normalized
+
+        return sorted(
+            companies.values()
         )

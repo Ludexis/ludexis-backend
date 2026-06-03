@@ -72,6 +72,8 @@ class IGDBProvider(MetadataProvider):
             first_release_date,
             genres.name,
             involved_companies.company.name,
+            involved_companies.developer,
+            involved_companies.publisher,
             cover.url,
             artworks.url;
         where id = {external_id};
@@ -119,20 +121,21 @@ class IGDBProvider(MetadataProvider):
                     "https:" + artwork["url"]
                 )
 
-        company_names = []
+        developers = []
+        publishers = []
 
-        for company in game.get(
-            "involved_companies",
-            [],
-        ):
-            company_obj = company.get(
-                "company",
-                {},
-            )
-
-            if company_obj.get("name"):
-                company_names.append(
-                    company_obj["name"]
+        for company in game.get("involved_companies", [],):
+            company_obj = company.get("company", {},)
+            company_name = company_obj.get("name")
+            if not company_name:
+                continue
+            if company.get("developer"):
+                developers.append(
+                    company_name
+                )
+            if company.get("publisher"):
+                publishers.append(
+                    company_name
                 )
 
         return MetadataDetails(
@@ -142,8 +145,8 @@ class IGDBProvider(MetadataProvider):
             description=game.get("summary"),
             release_date=release_date,
             genres=genres,
-            developers=company_names,
-            publishers=company_names,
+            developers=developers,
+            publishers=publishers,
             tags=[],
             artwork_urls=artwork_urls,
         )
