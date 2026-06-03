@@ -85,7 +85,7 @@ class ArtworkService:
         )
         return contents, extension
     
-    def _score_artwork_url(self, url: str,) -> int:
+    def _score_artwork_candidate(self, url: str,) -> int:
         url = url.lower()
         score = 0
         if "images.igdb.com" in url:
@@ -103,12 +103,31 @@ class ArtworkService:
     def _select_best_url(self, urls: list[str],) -> str | None:
         if not urls:
             return None
-        ranked = sorted(
-            urls,
-            key=self._score_artwork_url,
-            reverse=True,
-        )
-        return ranked[0]
+        best_url = None
+        best_score = -1
+        for url in urls:
+            score = (
+                self._score_artwork_candidate(
+                    url
+                )
+            )
+            try:
+                contents, _ = (
+                    self._download_artwork_url(
+                        url
+                    )
+                )
+                score += (
+                    self._score_image(
+                        contents
+                    )
+                )
+            except Exception:
+                pass
+            if score > best_score:
+                best_score = score
+                best_url = url
+        return best_url
 
     def auto_download_cover(self, db: Session, archive_entry_id: str, force: bool = False,) -> bool:
         entry = self.entry_repo.get_active(
@@ -655,3 +674,24 @@ class ArtworkService:
             "repaired": repaired,
             "failed": failed,
         }
+    
+    def _score_image(self, contents: bytes, ) -> int:
+        score = 0
+        try:
+            from io import BytesIO
+            with Image.open(
+                BytesIO(contents)
+            ) as image:
+                width, height = (
+                    image.size
+                )
+                score += (
+                    width * height
+                ) // 10000
+                if width >= 1000:
+                    score += 50
+                if height >= 500:
+                    score += 50
+        except Exception:
+            return 0
+        return score
