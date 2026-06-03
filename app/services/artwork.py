@@ -1,5 +1,8 @@
+from pathlib import Path
+import requests
 from fastapi import UploadFile
 from sqlalchemy.orm import Session
+from PIL import Image
 
 from app.core.config import settings
 from app.models.archive_entry import ArchiveEntry
@@ -7,6 +10,7 @@ from app.models.screenshot import Screenshot
 from app.repositories.archive_entry import ArchiveEntryRepository
 from app.repositories.screenshot import ScreenshotRepository
 from app.services.storage import StorageService
+from app.services.metadata import MetadataService
 from app.utils.artwork import ArtworkType, build_artwork_relative_path, is_allowed_artwork_mime_type
 from app.utils.enums import VerificationStatus
 
@@ -16,6 +20,7 @@ class ArtworkService:
         self.entry_repo = ArchiveEntryRepository()
         self.screenshot_repo = ScreenshotRepository()
         self.storage = StorageService()
+        self.metadata_service = MetadataService()
 
     def _read_file(self, file: UploadFile) -> bytes:
         file.file.seek(0)
@@ -28,6 +33,149 @@ class ArtworkService:
         if len(contents) > max_size:
             raise ValueError(f"Artwork file exceeds maximum size of {settings.MAX_ARTWORK_SIZE_MB} MB")
         return contents
+    
+    def _download_artwork_url(self, url: str,) -> tuple[bytes, str]:
+        response = requests.get(
+            url,
+            timeout=30,
+        )
+        response.raise_for_status()
+        content_type = (
+            response.headers.get(
+                "content-type",
+                ""
+            )
+            .split(";")[0]
+            .strip()
+            .lower()
+        )
+
+        if not is_allowed_artwork_mime_type(
+            content_type,
+            settings.ALLOWED_ARTWORK_MIME_TYPES,
+        ):
+            raise ValueError(
+                f"Unsupported artwork type: {content_type}"
+            )
+        contents = response.content
+        max_size = (
+            settings.MAX_ARTWORK_SIZE_MB
+            * 1024
+            * 1024
+        )
+        if len(contents) > max_size:
+            raise ValueError(
+                f"Artwork exceeds maximum size of "
+                f"{settings.MAX_ARTWORK_SIZE_MB} MB"
+            )
+
+        extension_map = {
+            "image/jpeg": ".jpg",
+            "image/png": ".png",
+            "image/webp": ".webp",
+            "image/gif": ".gif",
+            "image/svg+xml": ".svg",
+        }
+
+        extension = (
+            extension_map.get(
+                content_type,
+                ".jpg",
+            )
+        )
+        return contents, extension
+    
+    def auto_download_cover(self, db: Session, archive_entry_id: str, force: bool = False,) -> bool:
+        entry = self.entry_repo.get_active(
+            db,
+            archive_entry_id,
+        )
+        if entry is None:
+            return False
+        if (
+            entry.cover_path
+            and
+            self.storage.exists(
+                entry.cover_path
+            )
+            and
+            not force
+        ):
+            return True
+
+        details = (
+            self.metadata_service
+            .get_merged_details(
+                entry.title
+            )
+        )
+        if (
+            details is None
+            or
+            not details.artwork_urls
+        ):
+            return False
+        artwork_url = (
+            details.artwork_urls[0]
+        )
+        contents, extension = (
+            self._download_artwork_url(
+                artwork_url
+            )
+        )
+        relative_path = (
+            f"covers/"
+            f"{entry.id}"
+            f"{extension}"
+        )
+        stored_path = (
+            self.storage.save(
+                relative_path,
+                contents,
+            )
+        )
+        if (
+            entry.cover_path
+            and
+            entry.cover_path
+            != stored_path
+        ):
+            self.storage.delete(
+                entry.cover_path
+            )
+        entry.cover_path = (
+            stored_path
+        )
+        db.add(entry)
+        db.commit()
+        db.refresh(entry)
+        return True
+
+    def auto_download_missing_artwork(self, db: Session,) -> dict:
+        entries = (
+            self.entry_repo
+            .list_active(db)
+        )
+        downloaded = 0
+        failed = 0
+        for entry in entries:
+            try:
+                if (
+                    not entry.cover_path
+                ):
+                    if self.auto_download_cover(
+                        db,
+                        entry.id,
+                    ):
+                        downloaded += 1
+                    else:
+                        failed += 1
+            except Exception:
+                failed += 1
+        return {
+            "downloaded": downloaded,
+            "failed": failed,
+        }
 
     def upload_artwork(
         self,
@@ -192,29 +340,107 @@ class ArtworkService:
                 )
         return missing
 
-    def validate_all_artwork(self, db: Session) -> list[dict[str, str | list[str]]]:
+    def validate_all_artwork(self, db: Session,) -> list[dict]:
         entries = self.entry_repo.list_active(db)
         results = []
         for entry in entries:
             missing_types: list[str] = []
-            for artwork_type in (ArtworkType.COVER, ArtworkType.BANNER, ArtworkType.LOGO):
-                asset_path = getattr(entry, f"{artwork_type.value}_path", None)
-                if not asset_path or not self.storage.exists(asset_path):
-                    missing_types.append(artwork_type.value)
+            corrupt_types: list[str] = []
+            for artwork_type in (
+                ArtworkType.COVER,
+                ArtworkType.BANNER,
+                ArtworkType.LOGO,
+            ):
+                asset_path = getattr(
+                    entry,
+                    f"{artwork_type.value}_path",
+                    None,
+                )
+                if (
+                    not asset_path
+                    or
+                    not self.storage.exists(
+                        asset_path
+                    )
+                ):
+                    missing_types.append(
+                        artwork_type.value
+                    )
+                    continue
+                absolute_path = (
+                    self.storage.absolute_path(
+                        asset_path
+                    )
+                )
+                try:
+                    with Image.open(
+                        absolute_path
+                    ) as image:
+                        image.verify()
+                except Exception:
+                    corrupt_types.append(
+                        artwork_type.value
+                    )
             if len(entry.screenshots) == 0:
-                missing_types.append(ArtworkType.SCREENSHOT.value)
-            if missing_types:
-                entry.verification_status = VerificationStatus.MISSING
+                missing_types.append(
+                    ArtworkType.SCREENSHOT.value
+                )
+            if (
+                missing_types
+                or
+                corrupt_types
+            ):
+                entry.verification_status = (
+                    VerificationStatus.MISSING
+                )
             else:
-                entry.verification_status = VerificationStatus.VERIFIED
+                entry.verification_status = (
+                    VerificationStatus.VERIFIED
+                )
             db.add(entry)
             results.append(
                 {
-                    "archive_entry_id": entry.id,
+                    "archive_id": entry.id,
                     "title": entry.title,
-                    "verification_status": entry.verification_status.value,
-                    "missing_types": missing_types,
+                    "verification_status":
+                        entry.verification_status.value,
+                    "missing_types":
+                        missing_types,
+                    "corrupt_types":
+                        corrupt_types,
                 }
             )
         db.commit()
         return results
+
+    def validate_and_redownload_artwork(self, db: Session,) -> dict:
+        validation = (
+            self.validate_all_artwork(
+                db
+            )
+        )
+        repaired = 0
+        failed = 0
+        for item in validation:
+            needs_repair = (
+                "cover" in item["missing_types"]
+                or
+                "cover" in item["corrupt_types"]
+            )
+            if not needs_repair:
+                continue
+            try:
+                if self.auto_download_cover(
+                    db,
+                    item["archive_id"],
+                    force=True,
+                ):
+                    repaired += 1
+                else:
+                    failed += 1
+            except Exception:
+                failed += 1
+        return {
+            "repaired": repaired,
+            "failed": failed,
+        }
