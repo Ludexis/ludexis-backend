@@ -38,6 +38,7 @@ class ArchiveEntry(Base):
     metadata_source_id = mapped_column(sa.String(36), sa.ForeignKey("metadata_sources.id", ondelete="SET NULL"), nullable=True)
     metadata_source: str = mapped_column(sa.String(128), nullable=True)
     metadata_source_code: str = mapped_column(sa.String(128), nullable=True)
+    metadata_override: bool = mapped_column(sa.Boolean, nullable=False, default=False,)
     last_metadata_refresh = mapped_column(sa.DateTime(timezone=True), nullable=True)
     last_verified = mapped_column(sa.DateTime(timezone=True), nullable=True)
     verification_status: VerificationStatus = mapped_column(sa.Enum(VerificationStatus, name="verification_status"), nullable=False, default=VerificationStatus.UNKNOWN)

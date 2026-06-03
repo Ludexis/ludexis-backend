@@ -39,6 +39,24 @@ class ArchiveEntryService:
 
     def delete(self, db: Session, entry: ArchiveEntry) -> ArchiveEntry:
         return self.repo.delete(db, entry)
+    
+    def update_metadata(self, db, archive, payload,):
+        if payload.title is not None:
+            archive.title = payload.title
+
+        if payload.description is not None:
+            archive.description = payload.description
+
+        if payload.release_date is not None:
+            archive.release_date = payload.release_date
+
+        archive.metadata_override = (
+            payload.metadata_override
+        )
+
+        archive.metadata_status = (
+            MetadataStatus.MANUAL
+        )
 
     def _assign_relations(self, db: Session, entry: ArchiveEntry, data: ArchiveEntryCreate | ArchiveEntryUpdate) -> None:
         if hasattr(data, "tag_ids"):

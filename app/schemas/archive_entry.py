@@ -102,6 +102,7 @@ class ArchiveEntryUpdate(BaseModel):
     publisher_ids: list[str] | None = None
     collection_ids: list[str] | None = None
     related_entry_ids: list[str] | None = None
+    metadata_override: bool = True
 
     model_config = {
         "json_schema_extra": {

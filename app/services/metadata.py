@@ -108,6 +108,8 @@ class MetadataService:
         return best_result, best_score
     
     def auto_match_archive(self, db: Session, archive: ArchiveEntry, ) -> bool:
+        if archive.metadata_override:
+            return False
         match, score = self.auto_match(
             archive.title,
         )
@@ -206,6 +208,8 @@ class MetadataService:
         return prioritized + [provider for provider in self.providers if provider.name not in {p.name for p in prioritized}]
 
     def refresh_archive(self, db: Session, archive: ArchiveEntry,) -> bool:
+        if archive.metadata_override:
+            return False
         if (
             not archive.metadata_source
             or
@@ -259,6 +263,8 @@ class MetadataService:
         refreshed = 0
         failed = 0
         for archive in archives:
+            if archive.metadata_override:
+                continue
             if self.refresh_archive(
                 db,
                 archive,
