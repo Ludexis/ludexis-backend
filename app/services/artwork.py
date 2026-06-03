@@ -14,6 +14,7 @@ from app.services.storage import StorageService
 from app.services.metadata import MetadataService
 from app.utils.artwork import ArtworkType, build_artwork_relative_path, is_allowed_artwork_mime_type
 from app.utils.enums import VerificationStatus
+from app.models.screenshot import Screenshot
 
 
 class ArtworkService:
@@ -333,6 +334,41 @@ class ArtworkService:
         db.refresh(entry)
         return True
 
+    def auto_download_screenshots(self, db: Session, archive_entry_id: str, force: bool = False,) -> bool:
+        entry = self.entry_repo.get_active(
+            db,
+            archive_entry_id,
+        )
+        if entry is None:
+            return False
+        if (
+            len(entry.screenshots) > 0
+            and
+            not force
+        ):
+            return True
+        details = (
+            self.metadata_service
+            .get_merged_details(
+                entry.title
+            )
+        )
+        if (
+            details is None
+            or
+            not details.artwork_urls
+        ):
+            return False
+        self._download_screenshots(
+            db,
+            entry,
+            details.artwork_urls,
+        )
+        db.add(entry)
+        db.commit()
+        db.refresh(entry)
+        return True
+
     def auto_download_missing_artwork(self, db: Session,) -> dict:
         entries = (
             self.entry_repo
@@ -359,6 +395,13 @@ class ArtworkService:
 
                 if not entry.logo_path:
                     if self.auto_download_logo(
+                        db,
+                        entry.id,
+                    ):
+                        downloaded += 1
+
+                if len(entry.screenshots) == 0:
+                    if self.auto_download_screenshots(
                         db,
                         entry.id,
                     ):
@@ -972,3 +1015,46 @@ class ArtworkService:
             "deleted": deleted,
             "kept": kept,
         }
+    
+    def _download_screenshots(self, db, archive, screenshot_urls: list[str],) -> int:
+        imported = 0
+        for screenshot in list(
+            archive.screenshots
+        ):
+            self.storage.delete(
+                screenshot.file_path
+            )
+            db.delete(
+                screenshot
+            )
+        for index, url in enumerate(
+            screenshot_urls,
+            start=1,
+        ):
+            try:
+                contents, extension = (
+                    self._download_artwork_url(
+                        url
+                    )
+                )
+                relative_path = (
+                    f"screenshots/"
+                    f"{archive.id}_"
+                    f"{index}"
+                    f"{extension}"
+                )
+                self.storage.save(
+                    relative_path,
+                    contents,
+                )
+                screenshot = Screenshot(
+                    archive_entry_id=archive.id,
+                    file_path=relative_path,
+                )
+                db.add(
+                    screenshot
+                )
+                imported += 1
+            except Exception:
+                continue
+        return imported
