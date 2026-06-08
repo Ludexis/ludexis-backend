@@ -8,7 +8,15 @@ from app.utils.enums import JobStatus, JobType
 from app.models.job_history import JobHistory
 
 
-@celery_app.task(bind=True)
+@celery_app.task(
+    bind=True,
+    autoretry_for=(Exception,),
+    retry_backoff=True,
+    retry_backoff_max=300,
+    retry_kwargs={
+        "max_retries": 5,
+    },
+)
 def validate_artwork_task(self, job_history_id: str) -> str:
     db = SessionLocal()
     job_repo = JobHistoryRepository()

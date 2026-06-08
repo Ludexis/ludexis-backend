@@ -18,6 +18,7 @@ class JobHistory(Base):
     details: str = mapped_column(sa.Text, nullable=True)
     result: str = mapped_column(sa.Text, nullable=True)
     task_id: str = mapped_column(sa.String(255), nullable=True)
+    retry_count: int = mapped_column(sa.Integer, nullable=False,default=0)
     started_at = mapped_column(sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False)
     completed_at = mapped_column(sa.DateTime(timezone=True), nullable=True)
     user_id = mapped_column(sa.String(36), sa.ForeignKey("users.id", ondelete="SET NULL"), nullable=True)

@@ -7,7 +7,15 @@ from app.tasks.celery_app import celery_app
 from app.utils.enums import JobStatus, JobType
 
 
-@celery_app.task(bind=True)
+@celery_app.task(
+    bind=True,
+    autoretry_for=(Exception,),
+    retry_backoff=True,
+    retry_backoff_max=300,
+    retry_kwargs={
+        "max_retries": 3,
+    },
+)
 def scan_full_task(self, job_history_id: str) -> str:
     db = SessionLocal()
     try:
@@ -45,7 +53,15 @@ def scan_full_task(self, job_history_id: str) -> str:
         db.close()
 
 
-@celery_app.task(bind=True)
+@celery_app.task(
+    bind=True,
+    autoretry_for=(Exception,),
+    retry_backoff=True,
+    retry_backoff_max=300,
+    retry_kwargs={
+        "max_retries": 3,
+    },
+)
 def scan_incremental_task(self, job_history_id: str) -> str:
     db = SessionLocal()
     try:
