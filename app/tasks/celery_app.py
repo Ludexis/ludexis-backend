@@ -3,6 +3,7 @@ from datetime import datetime
 
 from celery import Celery
 from sqlalchemy.orm import Session
+from celery.schedules import crontab
 
 from app.core.config import settings
 from app.db.session import SessionLocal
@@ -21,6 +22,7 @@ celery_app.conf.update(
     result_serializer="json",
     timezone="UTC",
     enable_utc=True,
+    broker_connection_retry_on_startup=True,
 )
 
 
@@ -72,6 +74,29 @@ def run_job(self, job_history_id: str) -> str:
         db.close()
 
 
-# Import scan and artwork task definitions to make them available to Celery workers.
 import app.tasks.scan_tasks  # noqa: F401
 import app.tasks.artwork_tasks  # noqa: F401
+import app.tasks.metadata_tasks  # noqa: F401
+
+
+celery_app.conf.beat_schedule = {
+    "daily-metadata-refresh": {
+        "task":
+            "app.tasks.metadata_tasks.scheduled_metadata_refresh_task",
+        "schedule":
+            crontab(
+                hour=3,
+                minute=0,
+            ),
+    },
+
+    "daily-artwork-validation": {
+        "task":
+            "app.tasks.artwork_tasks.scheduled_artwork_validation_task",
+        "schedule":
+            crontab(
+                hour=4,
+                minute=0,
+            ),
+    },
+}

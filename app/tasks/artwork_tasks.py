@@ -5,6 +5,7 @@ from app.repositories.job_history import JobHistoryRepository
 from app.services.artwork import ArtworkService
 from app.tasks.celery_app import celery_app
 from app.utils.enums import JobStatus, JobType
+from app.models.job_history import JobHistory
 
 
 @celery_app.task(bind=True)
@@ -41,5 +42,30 @@ def validate_artwork_task(self, job_history_id: str) -> str:
             db.add(job)
             db.commit()
         raise
+    finally:
+        db.close()
+
+@celery_app.task
+def scheduled_artwork_validation_task() -> str:
+    db = SessionLocal()
+    try:
+        job = JobHistory(
+            job_type=(JobType.ARTWORK_REFRESH),
+            status=(JobStatus.PENDING),
+            details=("Scheduled artwork validation"),
+        )
+
+        db.add(job)
+        db.commit()
+        db.refresh(job)
+
+        task = (validate_artwork_task.delay(job.id))
+        job.task_id = task.id
+
+        db.add(job)
+        db.commit()
+
+        return task.id
+
     finally:
         db.close()
