@@ -1,1 +1,0 @@
-# Ludexis backend application package
