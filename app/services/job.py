@@ -60,3 +60,7 @@ class JobService:
         job.details = "Canceled"
         job.completed_at = datetime.utcnow()
         return self.repo.update(db, job, {"status": job.status, "details": job.details, "completed_at": job.completed_at})
+
+    def is_cancelled(self, db: Session, job_id: str,) -> bool:
+        job = self.repo.get(db, job_id,)
+        return (job is not None and job.status == JobStatus.CANCELED)

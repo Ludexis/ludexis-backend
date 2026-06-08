@@ -1,4 +1,5 @@
 from fastapi import APIRouter
+from app.api.job_monitor import router as job_monitor_router
 
 from app.core.config import settings
 from app.api.admin import router as admin_router
@@ -39,3 +40,4 @@ api_router.include_router(artwork_router)
 api_router.include_router(scan_router)
 api_router.include_router(metadata_router)
 api_router.include_router(admin_router)
+api_router.include_router(job_monitor_router)

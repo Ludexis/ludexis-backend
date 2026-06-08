@@ -30,13 +30,19 @@ def scan_full_task(self, job_history_id: str) -> str:
         db.commit()
 
         scanner = ScannerService()
-        stats = scanner.scan_full(db)
+        stats = scanner.scan_full(db, job_id=job.id,)
 
-        job.status = JobStatus.SUCCESS
+        if stats.get("cancelled"):
+            job.status = (JobStatus.CANCELED)
+            job.result = ("Full scan cancelled")
+        else:
+            job.status = (JobStatus.SUCCESS)
+            job.result = (f"Full scan completed: {stats}")
+
         job.progress = 100
-        job.result = f"Full scan completed: {stats}"
         job.details = job.result
-        job.completed_at = datetime.utcnow()
+        job.completed_at = (datetime.utcnow())
+
         db.add(job)
         db.commit()
         return job.result
@@ -72,17 +78,24 @@ def scan_incremental_task(self, job_history_id: str) -> str:
 
         job.status = JobStatus.RUNNING
         job.details = "Incremental scan started"
+
         db.add(job)
         db.commit()
 
         scanner = ScannerService()
-        stats = scanner.scan_incremental(db)
+        stats = scanner.scan_incremental(db, job_id=job.id,)
 
-        job.status = JobStatus.SUCCESS
+        if stats.get("cancelled"):
+            job.status = (JobStatus.CANCELED)
+            job.result = ("Incremental scan cancelled")
+        else:
+            job.status = (JobStatus.SUCCESS)
+            job.result = (f"Incremental scan completed: {stats}")
+
         job.progress = 100
-        job.result = f"Incremental scan completed: {stats}"
         job.details = job.result
-        job.completed_at = datetime.utcnow()
+        job.completed_at = (datetime.utcnow())
+        
         db.add(job)
         db.commit()
         return job.result

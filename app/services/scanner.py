@@ -3,6 +3,7 @@ from pathlib import Path
 from typing import Iterable
 from datetime import datetime, timezone
 import hashlib
+import time
 
 from app.core.config import settings
 from app.models.archive_entry import ArchiveEntry
@@ -11,6 +12,8 @@ from app.services.matching import MatchingService
 from app.utils.enums import MetadataStatus, VerificationStatus
 from app.utils.normalization import parse_archive_name
 from sqlalchemy.orm import Session
+from app.models.job_history import JobHistory
+from app.utils.enums import JobStatus
 
 from app.repositories.library import LibraryRepository
 
@@ -56,6 +59,13 @@ class ScannerService:
         if archive.file_hash != current_hash:
             return VerificationStatus.CORRUPTED
         return VerificationStatus.VERIFIED
+    
+    def _job_cancelled(self, db: Session, job_id: str | None,) -> bool:
+        if not job_id:
+            return False
+
+        status = (db.query(JobHistory.status).filter(JobHistory.id == job_id).scalar())
+        return (status== JobStatus.CANCELED)
 
     def _needs_processing(self, item: ArchiveScanItem, existing_entries: dict, ) -> bool:
         existing = existing_entries.get(item.file_path)
@@ -99,11 +109,12 @@ class ScannerService:
                 stats["corrupted"] += 1
         return stats
 
-    def scan_full(self, db: Session, scan_root: str | None = None, ) -> dict[str, int]:
+    def scan_full(self, db: Session, scan_root: str | None = None, job_id: str | None = None,) -> dict[str, int]:
         if scan_root:
             return self._process_items(
                 db,
                 self._discover_items(Path(scan_root)),
+                job_id=job_id,
             )
         libraries = self.library_repo.list_active(db)
         stats = {
@@ -111,20 +122,36 @@ class ScannerService:
             "matched": 0,
             "partial": 0,
             "unmatched": 0,
+            "cancelled": False,
         }
         for library in libraries:
+            if self._job_cancelled(db, job_id,):
+                stats["cancelled"] = True
+                return stats
             if not library.enabled:
                 continue
+
             library_stats = self._process_items(
                 db,
                 self._discover_items(Path(library.path)),
                 library_id=library.id,
+                job_id=job_id,
             )
-            for key in stats:
+
+            if library_stats.get("cancelled"):
+                stats["cancelled"] = True
+                return stats
+            
+            for key in (
+                "created",
+                "matched",
+                "partial",
+                "unmatched",
+            ):
                 stats[key] += library_stats[key]
         return stats
 
-    def scan_incremental(self, db: Session, scan_root: str | None = None,) -> dict[str, int]:
+    def scan_incremental(self, db: Session, scan_root: str | None = None, job_id: str | None = None,) -> dict[str, int]:
         existing_entries = {
             entry.file_path: entry
             for entry in self.repo.list_all(db)
@@ -141,6 +168,7 @@ class ScannerService:
             return self._process_items(
                 db,
                 items,
+                job_id=job_id,
             )
         libraries = self.library_repo.list_active(db)
         stats = {
@@ -148,10 +176,15 @@ class ScannerService:
             "matched": 0,
             "partial": 0,
             "unmatched": 0,
+            "cancelled": False,
         }
         for library in libraries:
+            if self._job_cancelled(db, job_id,):
+                stats["cancelled"] = True
+                return stats
             if not library.enabled:
                 continue
+
             items = [
                 item
                 for item in self._discover_items(
@@ -166,8 +199,19 @@ class ScannerService:
                 db,
                 items,
                 library_id=library.id,
+                job_id=job_id,
             )
-            for key in stats:
+            
+            if library_stats.get("cancelled"):
+                stats["cancelled"] = True
+                return stats
+            
+            for key in (
+                "created",
+                "matched",
+                "partial",
+                "unmatched",
+            ):
                 stats[key] += library_stats[key]
         return stats
 
@@ -223,9 +267,13 @@ class ScannerService:
             modified_time=None,
         )
 
-    def _process_items(self, db: Session, items: Iterable[ArchiveScanItem], library_id: str | None = None,) -> dict[str, int]:
+    def _process_items(self, db: Session, items: Iterable[ArchiveScanItem], library_id: str | None = None,job_id: str | None = None,) -> dict[str, int]:
         stats = {"created": 0, "matched": 0, "partial": 0, "unmatched": 0}
         for item in items:
+            if self._job_cancelled(db, job_id,):
+                stats["cancelled"] = True
+                return stats
+            
             existing_by_path = self.repo.get_by_file_path(
                 db,
                 item.file_path,

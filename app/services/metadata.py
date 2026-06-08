@@ -12,6 +12,8 @@ from app.services.metadata_conflict import MetadataConflictResolver
 from app.models.genre import Genre
 from app.models.developer import Developer
 from app.models.publisher import Publisher
+from app.models.job_history import JobHistory
+from app.utils.enums import JobStatus
 
 from app.repositories.genre import GenreRepository
 from app.repositories.developer import DeveloperRepository
@@ -252,7 +254,7 @@ class MetadataService:
         db.commit()
         return True
     
-    def refresh_all(self, db: Session,) -> dict:
+    def refresh_all(self, db: Session, job_id: str | None = None,) -> dict:
         archives = (
             db.query(ArchiveEntry)
             .filter(
@@ -264,6 +266,14 @@ class MetadataService:
         refreshed = 0
         failed = 0
         for archive in archives:
+            if job_id:
+                job = (db.query(JobHistory).filter(JobHistory.id== job_id).first())
+                if (job and job.status==JobStatus.CANCELED):
+                    return {
+                        "refreshed": refreshed,
+                        "failed": failed,
+                        "cancelled": True,
+                    }
             if archive.metadata_override:
                 continue
             if self.refresh_archive(

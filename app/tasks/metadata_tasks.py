@@ -32,10 +32,14 @@ def refresh_metadata_task(self, job_history_id: str,) -> str:
         db.commit()
 
         metadata_service = (MetadataService())
-        stats = (metadata_service.refresh_all(db))
-        job.status = (JobStatus.SUCCESS)
+        stats = (metadata_service.refresh_all(db, job.id,))        
+        if stats.get("cancelled"):
+            job.status = (JobStatus.CANCELED)
+            job.result = ("Metadata refresh cancelled")
+        else:
+            job.status = (JobStatus.SUCCESS)
+            job.result = (f"Metadata refresh completed: {stats}")
         job.progress = 100
-        job.result = (f"Metadata refresh completed: {stats}")
         job.details = (job.result)
         job.completed_at = (datetime.utcnow())
 
@@ -63,6 +67,21 @@ def refresh_metadata_task(self, job_history_id: str,) -> str:
 @celery_app.task
 def scheduled_metadata_refresh_task() -> str:
     db = SessionLocal()
+    existing = (db.query(JobHistory).filter(
+            JobHistory.job_type == JobType.METADATA_REFRESH,
+            JobHistory.status.in_(
+                [
+                    JobStatus.PENDING,
+                    JobStatus.RUNNING,
+                ]
+            ),
+        )
+        .first()
+    )
+
+    if existing:
+        return (f"metadata refresh already active: "f"{existing.id}")
+
     try:
         job = JobHistory(
             job_type=(JobType.METADATA_REFRESH),
