@@ -1,7 +1,7 @@
 from pathlib import Path
 from app.db.session import SessionLocal
 from app.services.scanner import ScannerService
-
+import uuid
 
 def test_scan_empty_folder(tmp_path):
     db = SessionLocal()
@@ -16,8 +16,8 @@ def test_scan_empty_folder(tmp_path):
 
 def test_scan_single_archive(tmp_path):
     db = SessionLocal()
-    archive = tmp_path / "Pytest_Unique_Game_001.rar"
-    archive.write_bytes(b"pytest_unique_game_001")
+    archive = tmp_path / f"{uuid.uuid4()}.rar"
+    archive.write_bytes(uuid.uuid4().hex.encode())
     scanner = ScannerService()
     result = scanner.scan_full(
         db,
@@ -29,8 +29,8 @@ def test_scan_single_archive(tmp_path):
 
 def test_duplicate_scan_does_not_create_duplicates(tmp_path):
     db = SessionLocal()
-    archive = tmp_path / "Pytest_Unique_Game_002.rar"
-    archive.write_bytes(b"pytest_unique_game_002")
+    archive = tmp_path / f"{uuid.uuid4()}.rar"
+    archive.write_bytes(uuid.uuid4().hex.encode())
     scanner = ScannerService()
     first = scanner.scan_full(
         db,
@@ -48,14 +48,14 @@ def test_duplicate_scan_does_not_create_duplicates(tmp_path):
 def test_incremental_scan_detects_new_file(tmp_path):
     db = SessionLocal()
     scanner = ScannerService()
-    first = tmp_path / "Pytest_Unique_Game_003.rar"
-    first.write_bytes(b"pytest_unique_game_003")
+    first = tmp_path / f"{uuid.uuid4()}.rar"
+    first.write_bytes(uuid.uuid4().hex.encode())
     scanner.scan_full(
         db,
         scan_root=str(tmp_path),
     )
-    second = tmp_path / "Pytest_Unique_Game_004.rar"
-    second.write_bytes(b"pytest_unique_game_004")
+    second = tmp_path / f"{uuid.uuid4()}.rar"
+    second.write_bytes(uuid.uuid4().hex.encode())
     result = scanner.scan_incremental(
         db,
         scan_root=str(tmp_path),

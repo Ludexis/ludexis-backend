@@ -4,7 +4,7 @@ from main import app
 client = TestClient(app)
 
 USERNAME = "admin"
-PASSWORD = "adminpassword"
+PASSWORD = "Admin123!"
 
 
 def login():
