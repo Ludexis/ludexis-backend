@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, UTC
 
 from app.db.session import SessionLocal
 from app.repositories.job_history import JobHistoryRepository
@@ -41,7 +41,7 @@ def scan_full_task(self, job_history_id: str) -> str:
 
         job.progress = 100
         job.details = job.result
-        job.completed_at = (datetime.utcnow())
+        job.completed_at = (datetime.now(UTC))
 
         db.add(job)
         db.commit()
@@ -51,7 +51,7 @@ def scan_full_task(self, job_history_id: str) -> str:
             job.status = JobStatus.FAILED
             job.details = str(exc)
             job.result = str(exc)
-            job.completed_at = datetime.utcnow()
+            job.completed_at = datetime.now(UTC)
             db.add(job)
             db.commit()
         raise
@@ -94,7 +94,7 @@ def scan_incremental_task(self, job_history_id: str) -> str:
 
         job.progress = 100
         job.details = job.result
-        job.completed_at = (datetime.utcnow())
+        job.completed_at = (datetime.now(UTC))
         
         db.add(job)
         db.commit()
@@ -104,7 +104,7 @@ def scan_incremental_task(self, job_history_id: str) -> str:
             job.status = JobStatus.FAILED
             job.details = str(exc)
             job.result = str(exc)
-            job.completed_at = datetime.utcnow()
+            job.completed_at = datetime.now(UTC)
             db.add(job)
             db.commit()
         raise

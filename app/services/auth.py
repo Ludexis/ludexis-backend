@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta
+from datetime import datetime, UTC, timedelta
 
 from jose import JWTError
 from sqlalchemy.orm import Session
@@ -24,7 +24,7 @@ class AuthService:
     def create_tokens(self, db: Session, user: User) -> dict[str, str]:
         access_token = create_access_token(subject=user.id)
         refresh_token = create_refresh_token(subject=user.id)
-        expires_at = datetime.utcnow() + timedelta(days=30)
+        expires_at = datetime.now(UTC) + timedelta(days=30)
         self.refresh_repo.create(db, {
             "token": refresh_token,
             "user_id": user.id,

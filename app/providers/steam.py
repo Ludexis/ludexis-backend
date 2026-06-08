@@ -1,7 +1,6 @@
-from datetime import datetime
+from datetime import datetime, UTC
 import requests
 from html import unescape
-from datetime import datetime
 
 from app.providers.metadata_provider import MetadataProvider
 from app.schemas.metadata import (

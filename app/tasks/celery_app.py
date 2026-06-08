@@ -1,5 +1,5 @@
 import time
-from datetime import datetime
+from datetime import datetime, UTC
 
 from celery import Celery
 from sqlalchemy.orm import Session
@@ -56,7 +56,7 @@ def run_job(self, job_history_id: str) -> str:
         job.progress = 100
         job.result = f"{job.job_type} completed successfully"
         job.details = job.result
-        job.completed_at = datetime.utcnow()
+        job.completed_at = datetime.now(UTC)
         db.add(job)
         db.commit()
         return job.result
@@ -66,7 +66,7 @@ def run_job(self, job_history_id: str) -> str:
             job.status = JobStatus.FAILED
             job.details = str(exc)
             job.result = str(exc)
-            job.completed_at = datetime.utcnow()
+            job.completed_at = datetime.now(UTC)
             db.add(job)
             db.commit()
         raise

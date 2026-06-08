@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterable
-from datetime import datetime, timezone
+from datetime import datetime, UTC, timezone
 import hashlib
 import time
 

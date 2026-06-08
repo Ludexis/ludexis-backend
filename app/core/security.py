@@ -1,5 +1,5 @@
-from datetime import datetime, timedelta
-
+from datetime import datetime, UTC, timedelta
+from uuid import uuid4
 from jose import JWTError, jwt
 from passlib.context import CryptContext
 
@@ -9,15 +9,37 @@ pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 
 def create_access_token(subject: str) -> str:
-    expire = datetime.utcnow() + timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
-    payload = {"sub": subject, "type": "access", "exp": expire}
-    return jwt.encode(payload, settings.JWT_SECRET_KEY, algorithm=settings.JWT_ALGORITHM)
+    expire = datetime.now(UTC) + timedelta(
+        minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES
+    )
+    payload = {
+        "sub": subject,
+        "type": "access",
+        "exp": expire,
+        "jti": str(uuid4()),
+    }
+    return jwt.encode(
+        payload,
+        settings.JWT_SECRET_KEY,
+        algorithm=settings.JWT_ALGORITHM,
+    )
 
 
 def create_refresh_token(subject: str) -> str:
-    expire = datetime.utcnow() + timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS)
-    payload = {"sub": subject, "type": "refresh", "exp": expire}
-    return jwt.encode(payload, settings.JWT_SECRET_KEY, algorithm=settings.JWT_ALGORITHM)
+    expire = datetime.now(UTC) + timedelta(
+        days=settings.REFRESH_TOKEN_EXPIRE_DAYS
+    )
+    payload = {
+        "sub": subject,
+        "type": "refresh",
+        "exp": expire,
+        "jti": str(uuid4()),
+    }
+    return jwt.encode(
+        payload,
+        settings.JWT_SECRET_KEY,
+        algorithm=settings.JWT_ALGORITHM,
+    )
 
 
 def verify_token(token: str, token_type: str = "access") -> str:

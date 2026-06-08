@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, UTC
 
 from app.models.user import User
 from app.repositories.job_history import JobHistoryRepository
@@ -58,7 +58,7 @@ class JobService:
             celery_app.control.revoke(job.task_id, terminate=True)
         job.status = JobStatus.CANCELED
         job.details = "Canceled"
-        job.completed_at = datetime.utcnow()
+        job.completed_at = datetime.now(UTC)
         return self.repo.update(db, job, {"status": job.status, "details": job.details, "completed_at": job.completed_at})
 
     def is_cancelled(self, db: Session, job_id: str,) -> bool:

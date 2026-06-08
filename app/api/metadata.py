@@ -16,11 +16,11 @@ router = APIRouter(prefix="/metadata", tags=["metadata"])
     response_description="Metadata search results retrieved.",
 )
 def search_metadata(
-    q: str = Query(..., description="Search query", example="Star Explorer"),
+    q: str = Query(..., description="Search query", examples=["Star Explorer"]),
     provider_priority: list[str] | None = Query(
         None,
         description="Preferred provider order",
-        example=["igdb", "steam"],
+        examples=["igdb", "steam"],
     ),
     current_user=Depends(get_current_active_user),
     metadata_service: MetadataService = Depends(get_metadata_service),

@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, UTC
 
 from app.db.session import SessionLocal
 from app.repositories.job_history import JobHistoryRepository
@@ -37,7 +37,7 @@ def validate_artwork_task(self, job_history_id: str) -> str:
         job.progress = 100
         job.result = f"Artwork validation completed: {len(results)} entries checked"
         job.details = job.result
-        job.completed_at = datetime.utcnow()
+        job.completed_at = datetime.now(UTC)
         db.add(job)
         db.commit()
         return job.result
@@ -46,7 +46,7 @@ def validate_artwork_task(self, job_history_id: str) -> str:
             job.status = JobStatus.FAILED
             job.details = str(exc)
             job.result = str(exc)
-            job.completed_at = datetime.utcnow()
+            job.completed_at = datetime.now(UTC)
             db.add(job)
             db.commit()
         raise

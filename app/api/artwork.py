@@ -25,10 +25,10 @@ service = ArtworkService()
     response_description="Artwork uploaded.",
 )
 def upload_artwork(
-    archive_entry_id: str = Form(..., description="Archive entry ID", example="entry-uuid-1"),
-    artwork_type: ArtworkType = Form(..., description="Artwork type", example="cover"),
+    archive_entry_id: str = Form(..., description="Archive entry ID", examples=["entry-uuid-1"]),
+    artwork_type: ArtworkType = Form(..., description="Artwork type", examples=["cover"]),
     file: UploadFile = File(..., description="Artwork file"),
-    caption: str | None = Form(None, description="Optional caption", example="Front cover"),
+    caption: str | None = Form(None, description="Optional caption", examples=["Front cover"]),
     current_user=Depends(require_permission(PermissionName.EDIT_METADATA)),
     db: Session = Depends(get_db),
 ):
@@ -47,11 +47,11 @@ def upload_artwork(
     response_description="Artwork replaced.",
 )
 def replace_artwork(
-    archive_entry_id: str = Form(..., description="Archive entry ID", example="entry-uuid-1"),
-    artwork_type: ArtworkType = Form(..., description="Artwork type", example="banner"),
+    archive_entry_id: str = Form(..., description="Archive entry ID", examples=["entry-uuid-1"]),
+    artwork_type: ArtworkType = Form(..., description="Artwork type", examples=["banner"]),
     file: UploadFile = File(..., description="Artwork file"),
-    screenshot_id: str | None = Form(None, description="Screenshot ID to replace", example="screenshot-uuid-1"),
-    caption: str | None = Form(None, description="Optional caption", example="Updated banner"),
+    screenshot_id: str | None = Form(None, description="Screenshot ID to replace", examples=["screenshot-uuid-1"]),
+    caption: str | None = Form(None, description="Optional caption", examples=["Updated banner"]),
     current_user=Depends(require_permission(PermissionName.EDIT_METADATA)),
     db: Session = Depends(get_db),
 ):
@@ -71,7 +71,7 @@ def replace_artwork(
 )
 def delete_artwork(
     artwork_id: str,
-    artwork_type: ArtworkType | None = Query(None, description="Artwork type", example="cover"),
+    artwork_type: ArtworkType | None = Query(None, description="Artwork type", examples=["cover"]),
     current_user=Depends(require_permission(PermissionName.EDIT_METADATA)),
     db: Session = Depends(get_db),
 ):
