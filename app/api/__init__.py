@@ -20,6 +20,7 @@ from app.api.search import router as search_router
 from app.api.setup import router as setup_router
 from app.api.tags import router as tags_router
 from app.api.users import router as users_router
+from app.api.health import router as health_router
 
 api_router = APIRouter(prefix=settings.API_PREFIX)
 api_router.include_router(auth_router)
@@ -41,3 +42,4 @@ api_router.include_router(scan_router)
 api_router.include_router(metadata_router)
 api_router.include_router(admin_router)
 api_router.include_router(job_monitor_router)
+api_router.include_router(health_router)
