@@ -63,6 +63,27 @@ def setup_database():
 
     db.add(admin_user)
 
+    user_role = Role(
+        name="User",
+        description="Regular user role",
+    )
+
+    db.add(user_role)
+
+    test_user = User(
+        username="testuser",
+        email="testuser@example.com",
+        hashed_password=hash_password(
+            "Test123!"
+        ),
+        is_active=True,
+        is_superuser=False,
+    )
+
+    test_user.roles.append(user_role)
+
+    db.add(test_user)
+
     db.commit()
     db.close()
 
