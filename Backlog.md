@@ -16,7 +16,7 @@
 ### Low Priority
 
 - Improve Swagger authorization experience for protected endpoints.
-- Add token expiration and refresh workflow tests.
+- ✅~~Add token expiration and refresh workflow tests.~~
 
 ---
 
