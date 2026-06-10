@@ -2,7 +2,7 @@
 
 ## Authentication & Authorization
 
-### High Priority
+### ✅High Priority
 
 - ✅~~Fix Swagger OAuth2 integration mismatch (Swagger expects OAuth2 Password Flow form data while backend login endpoint currently accepts JSON payloads).~~
 - ✅~~Replace development JWT secret with a generated production-grade secret.~~
@@ -11,7 +11,7 @@
   - ~~passlib==1.7.4~~
   - ~~bcrypt==4.0.1~~
   - ~~bcrypt >=5.0.0 is incompatible with passlib 1.7.4 and breaks authentication.~~
-- Add automated integration tests for authentication, token refresh, logout, and authorization flows.
+- ✅~~Add automated integration tests for authentication, token refresh, logout, and authorization flows.~~
 
 ### Low Priority
 
@@ -32,7 +32,6 @@
 
 ### Medium Priority
 
-- Add role management UI support.
 - ✅~~Add permission audit reporting.~~
 - ✅~~Expand audit logging coverage for administrative actions.~~
 
@@ -180,6 +179,6 @@
 
 ### Medium Priority
 
-- End-to-end API test suite.
+- ✅~~End-to-end API test suite.~~
 - Performance testing for large libraries.
 - Load testing for search and scan operations.
