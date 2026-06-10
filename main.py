@@ -5,11 +5,8 @@ from app.api import api_router
 from app.core.config import settings
 from app.core.logging import setup_logging
 from app.db.session import engine
-from app.db.base import Base
 
 setup_logging()
-
-Base.metadata.create_all(bind=engine)
 
 app = FastAPI(
     title="Ludexis Backend",

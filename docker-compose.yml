@@ -1,48 +1,100 @@
-version: "3.9"
-
 services:
   db:
     image: postgres:16
+    restart: unless-stopped
+
+    env_file:
+      - .env
+
     environment:
       POSTGRES_USER: ludexis
       POSTGRES_PASSWORD: ludexis
       POSTGRES_DB: ludexis
+
     volumes:
       - db_data:/var/lib/postgresql/data
+
     ports:
       - "5432:5432"
 
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ludexis"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
   redis:
     image: redis:7
+    restart: unless-stopped
+
     ports:
       - "6379:6379"
 
+    volumes:
+      - redis_data:/data
+
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
   backend:
     build: .
-    command: uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+    restart: unless-stopped
+
+    command: uvicorn main:app --host 0.0.0.0 --port 8000
+
+    env_file:
+      - .env.docker
+
+    environment:
+      ARTWORK_STORAGE_PATH: /artwork
+
     volumes:
       - .:/usr/src/app
+      - artwork_data:/artwork
+
     ports:
       - "8000:8000"
-    environment:
-      - DATABASE_URL=postgresql+psycopg://ludexis:ludexis@db:5432/ludexis
-      - REDIS_URL=redis://redis:6379/0
-      - JWT_SECRET_KEY=supersecretjwtkey
+
     depends_on:
       - db
       - redis
 
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import requests; requests.get('http://localhost:8000/api/health').raise_for_status()",
+        ]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
   worker:
     build: .
+    restart: unless-stopped
+
     command: celery -A app.tasks.celery_app worker --loglevel=info
+
+    env_file:
+      - .env.docker
+
+    environment:
+      ARTWORK_STORAGE_PATH: /artwork
+
     volumes:
       - .:/usr/src/app
-    environment:
-      - DATABASE_URL=postgresql+psycopg://ludexis:ludexis@db:5432/ludexis
-      - REDIS_URL=redis://redis:6379/0
+      - artwork_data:/artwork
+
     depends_on:
       - db
       - redis
 
 volumes:
   db_data:
+  redis_data:
+  artwork_data:
