@@ -5,15 +5,16 @@ from app.repositories.job_history import JobHistoryRepository
 from app.services.scanner import ScannerService
 from app.tasks.celery_app import celery_app
 from app.utils.enums import JobStatus, JobType
+from app.core.config import settings
 
 
 @celery_app.task(
     bind=True,
     autoretry_for=(Exception,),
     retry_backoff=True,
-    retry_backoff_max=300,
+    retry_backoff_max=settings.JOB_RETRY_BACKOFF_MAX,
     retry_kwargs={
-        "max_retries": 3,
+        "max_retries": settings.JOB_MAX_RETRIES,
     },
 )
 def scan_full_task(self, job_history_id: str) -> str:
@@ -63,9 +64,9 @@ def scan_full_task(self, job_history_id: str) -> str:
     bind=True,
     autoretry_for=(Exception,),
     retry_backoff=True,
-    retry_backoff_max=300,
+    retry_backoff_max=settings.JOB_RETRY_BACKOFF_MAX,
     retry_kwargs={
-        "max_retries": 3,
+        "max_retries": settings.JOB_MAX_RETRIES,
     },
 )
 def scan_incremental_task(self, job_history_id: str) -> str:

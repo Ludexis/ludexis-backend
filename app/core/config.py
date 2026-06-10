@@ -19,10 +19,10 @@ class Settings(BaseSettings):
     IGDB_TOKEN_URL: str = "https://id.twitch.tv/oauth2/token"
     IGDB_API_URL: str = "https://api.igdb.com/v4"
 
-    DATABASE_URL: PostgresDsn = "postgresql+psycopg://ludexis:ludexis@db:5432/ludexis"
-    REDIS_URL: RedisDsn = "redis://localhost:6379/0"
-    CELERY_BROKER_URL: RedisDsn = "redis://localhost:6379/0"
-    CELERY_RESULT_BACKEND: RedisDsn = "redis://localhost:6379/0"
+    DATABASE_URL: PostgresDsn
+    REDIS_URL: RedisDsn
+    CELERY_BROKER_URL: RedisDsn
+    CELERY_RESULT_BACKEND: RedisDsn
     LIBRARY_SCAN_PATH: str = "./library"
     ARTWORK_STORAGE_PATH: str = "./artwork"
     MAX_ARTWORK_SIZE_MB: int = 10
@@ -38,6 +38,8 @@ class Settings(BaseSettings):
     JWT_ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 15
     REFRESH_TOKEN_EXPIRE_DAYS: int = 30
+    JOB_MAX_RETRIES: int = 5
+    JOB_RETRY_BACKOFF_MAX: int = 300
 
     CORS_ORIGINS: List[str] = ["*"]
 
