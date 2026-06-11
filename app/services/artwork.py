@@ -16,6 +16,10 @@ from app.utils.artwork import ArtworkType, build_artwork_relative_path, is_allow
 from app.utils.enums import VerificationStatus
 from app.models.screenshot import Screenshot
 
+from app.core.logging import get_logger
+
+logger = get_logger(__name__)
+
 
 class ArtworkService:
     def __init__(self) -> None:
@@ -197,6 +201,14 @@ class ArtworkService:
         entry.cover_path = (
             stored_path
         )
+        logger.info(
+            "Cover artwork downloaded",
+            extra={
+                "archive_id": entry.id,
+                "title": entry.title,
+                "path": stored_path,
+            },
+        )
         db.add(entry)
         db.commit()
         db.refresh(entry)
@@ -266,6 +278,14 @@ class ArtworkService:
         db.add(entry)
         db.commit()
         db.refresh(entry)
+        logger.info(
+            "Banner artwork downloaded",
+            extra={
+                "archive_id": entry.id,
+                "title": entry.title,
+                "path": stored_path,
+            },
+        )
         return True
 
     def auto_download_logo(self, db: Session, archive_entry_id: str, force: bool = False,) -> bool:
@@ -332,6 +352,14 @@ class ArtworkService:
         db.add(entry)
         db.commit()
         db.refresh(entry)
+        logger.info(
+            "Logo artwork downloaded",
+            extra={
+                "archive_id": entry.id,
+                "title": entry.title,
+                "path": stored_path,
+            },
+        )
         return True
 
     def auto_download_screenshots(self, db: Session, archive_entry_id: str, force: bool = False,) -> bool:
@@ -359,7 +387,7 @@ class ArtworkService:
             not details.artwork_urls
         ):
             return False
-        self._download_screenshots(
+        imported = self._download_screenshots(
             db,
             entry,
             details.artwork_urls,
@@ -367,6 +395,14 @@ class ArtworkService:
         db.add(entry)
         db.commit()
         db.refresh(entry)
+        logger.info(
+            "Screenshot artwork downloaded",
+            extra={
+                "archive_id": entry.id,
+                "title": entry.title,
+                "screenshots_imported": imported,
+            },
+        )
         return True
 
     def auto_download_missing_artwork(self, db: Session,) -> dict:
@@ -409,6 +445,13 @@ class ArtworkService:
 
             except Exception:
                 failed += 1
+                logger.warning(
+                    "Artwork download failed",
+                    extra={
+                        "archive_id": entry.id,
+                        "title": entry.title,
+                    },
+                )
         return {
             "downloaded": downloaded,
             "failed": failed,
@@ -615,6 +658,15 @@ class ArtworkService:
                     ) as image:
                         image.verify()
                 except Exception:
+                    logger.warning(
+                        "Artwork validation failed",
+                        extra={
+                            "archive_id": entry.id,
+                            "title": entry.title,
+                            "artwork_type": artwork_type.value,
+                        },
+                    )
+
                     corrupt_types.append(
                         artwork_type.value
                     )
@@ -943,6 +995,13 @@ class ArtworkService:
                 archive
             )
         db.commit()
+        logger.info(
+            "Artwork deduplication completed",
+            extra={
+                "duplicates_found": len(duplicates),
+                "deduplicated": deduplicated,
+            },
+        )
         return {
             "deduplicated":
             deduplicated,

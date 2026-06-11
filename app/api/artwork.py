@@ -95,3 +95,15 @@ def list_missing_artwork(
 ):
     missing = service.list_missing_artwork(db)
     return [ArtworkMissingResponse(**entry) for entry in missing]
+
+
+@router.post(
+    "/auto-download",
+    summary="Auto download missing artwork",
+    description="Automatically download missing artwork for archive entries.",
+)
+def auto_download_missing_artwork(
+    current_user=Depends(require_permission(PermissionName.EDIT_METADATA)),
+    db: Session = Depends(get_db),
+):
+    return service.auto_download_missing_artwork(db)

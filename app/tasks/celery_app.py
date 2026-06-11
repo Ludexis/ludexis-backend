@@ -14,11 +14,11 @@ from app.repositories.job_history import JobHistoryRepository
 from app.utils.enums import JobStatus
 from app.core.logging import setup_logging as configure_logging
 
-configure_logging()
+#configure_logging()
 
-@setup_logging.connect
-def configure_celery_logging(*args, **kwargs):
-    configure_logging()
+#@setup_logging.connect
+#def configure_celery_logging(*args, **kwargs):
+#    configure_logging()
 
 celery_app = Celery(
     "ludexis",

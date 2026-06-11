@@ -162,7 +162,7 @@
 
 - ✅~~Health check endpoints.~~
 - Metrics and monitoring integration.
-- Structured logging improvements.
+- ✅~~Structured logging improvements.~~
 
 ---
 
@@ -184,11 +184,3 @@
 - Load testing for search and scan operations.
 
 ---
-
-## Backend Logging Improvements
-
-- Convert Celery worker logs to JSON
-- Add request correlation IDs
-- Add job correlation IDs
-- Add structured exception logging
-- Add log level configuration via environment variables
