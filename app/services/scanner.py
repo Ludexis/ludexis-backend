@@ -14,8 +14,10 @@ from app.utils.normalization import parse_archive_name
 from sqlalchemy.orm import Session
 from app.models.job_history import JobHistory
 from app.utils.enums import JobStatus
-
 from app.repositories.library import LibraryRepository
+from app.core.logging import get_logger
+
+logger = get_logger(__name__)
 
 SUPPORTED_ARCHIVE_EXTENSIONS = {".zip", ".rar", ".7z", ".iso", ".exe"}
 SUPPORTED_FOLDER_TYPE = "folder"
@@ -110,12 +112,30 @@ class ScannerService:
         return stats
 
     def scan_full(self, db: Session, scan_root: str | None = None, job_id: str | None = None,) -> dict[str, int]:
+        logger.info(
+            "Full scan started",
+            extra={
+                "job_id": job_id,
+                "scan_root": scan_root,
+            },
+        )
         if scan_root:
-            return self._process_items(
+            stats = self._process_items(
                 db,
                 self._discover_items(Path(scan_root)),
                 job_id=job_id,
             )
+            logger.info(
+                "Full scan completed",
+                extra={
+                    "job_id": job_id,
+                    "archives_created": stats["created"],
+                    "archives_matched": stats["matched"],
+                    "archives_partial": stats["partial"],
+                    "archives_unmatched": stats["unmatched"],
+                }
+            )
+            return stats
         libraries = self.library_repo.list_active(db)
         stats = {
             "created": 0,
@@ -130,6 +150,15 @@ class ScannerService:
                 return stats
             if not library.enabled:
                 continue
+            logger.info(
+                "Library scan started",
+                extra={
+                    "library_id": library.id,
+                    "library_name": library.name,
+                    "path": library.path,
+                    "job_id": job_id,
+                },
+            )
 
             library_stats = self._process_items(
                 db,
@@ -149,9 +178,26 @@ class ScannerService:
                 "unmatched",
             ):
                 stats[key] += library_stats[key]
+        logger.info(
+            "Full scan completed",
+            extra={
+                "job_id": job_id,
+                "archives_created": stats["created"],
+                "archives_matched": stats["matched"],
+                "archives_partial": stats["partial"],
+                "archives_unmatched": stats["unmatched"],
+            }
+        )
         return stats
 
     def scan_incremental(self, db: Session, scan_root: str | None = None, job_id: str | None = None,) -> dict[str, int]:
+        logger.info(
+            "Incremental scan started",
+            extra={
+                "job_id": job_id,
+                "scan_root": scan_root,
+            },
+        )
         existing_entries = {
             entry.file_path: entry
             for entry in self.repo.list_all(db)
@@ -165,11 +211,22 @@ class ScannerService:
                     existing_entries,
                 )
             ]
-            return self._process_items(
+            stats = self._process_items(
                 db,
                 items,
                 job_id=job_id,
             )
+            logger.info(
+                "Incremental scan completed",
+                extra={
+                    "job_id": job_id,
+                    "archives_created": stats["created"],
+                    "archives_matched": stats["matched"],
+                    "archives_partial": stats["partial"],
+                    "archives_unmatched": stats["unmatched"],
+                }
+            )
+            return stats
         libraries = self.library_repo.list_active(db)
         stats = {
             "created": 0,
@@ -213,6 +270,16 @@ class ScannerService:
                 "unmatched",
             ):
                 stats[key] += library_stats[key]
+        logger.info(
+            "Incremental scan completed",
+            extra={
+                "job_id": job_id,
+                "archives_created": stats["created"],
+                "archives_matched": stats["matched"],
+                "archives_partial": stats["partial"],
+                "archives_unmatched": stats["unmatched"],
+            },
+        )
         return stats
 
     def _discover_items(self, base_path: Path) -> list[ArchiveScanItem]:
@@ -272,6 +339,12 @@ class ScannerService:
         for item in items:
             if self._job_cancelled(db, job_id,):
                 stats["cancelled"] = True
+                logger.warning(
+                    "Scan cancelled",
+                    extra={
+                        "job_id": job_id,
+                    },
+                )
                 return stats
             
             existing_by_path = self.repo.get_by_file_path(
