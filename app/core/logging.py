@@ -34,6 +34,8 @@ def setup_logging() -> None:
     handler.setFormatter(formatter)
     root_logger.setLevel(level)
     root_logger.addHandler(handler)
+    logging.getLogger("httpx").setLevel(logging.WARNING)
+    logging.getLogger("httpcore").setLevel(logging.WARNING)
 
 
 def get_logger(name: str) -> logging.Logger:

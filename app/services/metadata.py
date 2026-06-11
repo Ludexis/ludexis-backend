@@ -19,6 +19,10 @@ from app.repositories.genre import GenreRepository
 from app.repositories.developer import DeveloperRepository
 from app.repositories.publisher import PublisherRepository
 
+from app.core.logging import get_logger
+
+logger = get_logger(__name__)
+
 class MetadataService:
     def __init__(self, providers: list[MetadataProvider] | None = None) -> None:
         self.providers = providers or [
@@ -90,12 +94,24 @@ class MetadataService:
             )
 
     def auto_match(self, title: str, ) -> tuple[MetadataSearchResult | None, float]:
+        logger.info(
+            "Metadata auto-match started",
+            extra={
+                "title": title,
+            },
+        )
         results = self.search(
             title,
             preferred_providers=["IGDB"],
             limit=20,
         )
         if not results:
+            logger.info(
+                "Metadata auto-match returned no results",
+                extra={
+                    "title": title,
+                },
+            )
             return None, 0.0
         best_result = None
         best_score = 0.0
@@ -109,10 +125,33 @@ class MetadataService:
             if score > best_score:
                 best_score = score
                 best_result = result
+        logger.info(
+            "Metadata auto-match completed",
+            extra={
+                "title": title,
+                "provider": best_result.provider,
+                "provider_id": best_result.provider_id,
+                "score": round(best_score, 3),
+            },
+        )
         return best_result, best_score
     
     def auto_match_archive(self, db: Session, archive: ArchiveEntry, ) -> bool:
+        logger.info(
+            "Archive metadata matching started",
+            extra={
+                "archive_id": archive.id,
+                "title": archive.title,
+            },
+        )
         if archive.metadata_override:
+            logger.info(
+                "Archive metadata matching skipped",
+                extra={
+                    "archive_id": archive.id,
+                    "reason": "metadata_override",
+                },
+            )
             return False
         match, score = self.auto_match(
             archive.title,
@@ -126,6 +165,13 @@ class MetadataService:
             )
             db.add(archive)
             db.commit()
+            logger.info(
+                "Archive metadata unmatched",
+                extra={
+                    "archive_id": archive.id,
+                    "title": archive.title,
+                },
+            )
             return False
         if score >= 0.85:
             archive.metadata_status = (
@@ -165,21 +211,61 @@ class MetadataService:
         )
         db.add(archive)
         db.commit()
+        logger.info(
+            "Archive metadata matched",
+            extra={
+                "archive_id": archive.id,
+                "provider": match.provider,
+                "provider_id": match.provider_id,
+                "status": archive.metadata_status.value,
+            },
+        )
         return (archive.metadata_status!= MetadataStatus.UNMATCHED)
 
     def search(self, query: str, preferred_providers: list[str] | None = None, limit: int = 20) -> list[MetadataSearchResult]:
+        logger.info(
+            "Metadata search started",
+            extra={
+                "query": query,
+                "preferred_providers": preferred_providers,
+                "limit": limit,
+            },
+        )
         providers = self._get_providers(preferred_providers)
         results: list[MetadataSearchResult] = []
 
         for provider in providers:
             try:
                 provider_results = provider.search(query, limit=limit)
+                logger.info(
+                    "Metadata provider search completed",
+                    extra={
+                        "provider": provider.name,
+                        "query": query,
+                        "result_count": len(provider_results),
+                    },
+                )
             except NotImplementedError:
+                continue
+            except Exception:
+                logger.exception(
+                    "Metadata provider search failed",
+                    extra={
+                        "provider": provider.name,
+                        "query": query,
+                    },
+                )
                 continue
             if provider_results:
                 results.extend(provider_results)
                 break
-
+        logger.info(
+            "Metadata search completed",
+            extra={
+                "query": query,
+                "total_results": len(results),
+            },
+        )
         return results
 
     def get_details(self, provider_name: str | None, provider_id: str) -> MetadataDetails | None:
@@ -212,7 +298,21 @@ class MetadataService:
         return prioritized + [provider for provider in self.providers if provider.name not in {p.name for p in prioritized}]
 
     def refresh_archive(self, db: Session, archive: ArchiveEntry,) -> bool:
+        logger.info(
+            "Metadata refresh started",
+            extra={
+                "archive_id": archive.id,
+                "title": archive.title,
+            },
+        )
         if archive.metadata_override:
+            logger.info(
+                "Metadata refresh skipped",
+                extra={
+                    "archive_id": archive.id,
+                    "reason": "metadata_override",
+                },
+            )
             return False
         if (
             not archive.metadata_source
@@ -224,6 +324,8 @@ class MetadataService:
         details = self.get_merged_details(
             archive.title
         )
+        if not details:
+            return False
         self._sync_genres(
             db,
             archive,
@@ -241,8 +343,6 @@ class MetadataService:
             archive,
             details.publishers,
         )
-        if not details:
-            return False
         if details.description:
             archive.description = details.description
         if details.release_date:
@@ -252,9 +352,22 @@ class MetadataService:
         )
         db.add(archive)
         db.commit()
+        logger.info(
+            "Metadata refresh completed",
+            extra={
+                "archive_id": archive.id,
+                "provider": archive.metadata_source,
+            },
+        )
         return True
     
     def refresh_all(self, db: Session, job_id: str | None = None,) -> dict:
+        logger.info(
+            "Metadata batch refresh started",
+            extra={
+                "job_id": job_id,
+            },
+        )
         archives = (
             db.query(ArchiveEntry)
             .filter(
@@ -269,12 +382,25 @@ class MetadataService:
             if job_id:
                 job = (db.query(JobHistory).filter(JobHistory.id== job_id).first())
                 if (job and job.status==JobStatus.CANCELED):
+                    logger.warning(
+                        "Metadata batch refresh cancelled",
+                        extra={
+                            "job_id": job_id,
+                        },
+                    )
                     return {
                         "refreshed": refreshed,
                         "failed": failed,
                         "cancelled": True,
                     }
             if archive.metadata_override:
+                logger.info(
+                    "Metadata refresh skipped",
+                    extra={
+                        "archive_id": archive.id,
+                        "reason": "metadata_override",
+                    },
+                )
                 continue
             if self.refresh_archive(
                 db,
@@ -283,6 +409,14 @@ class MetadataService:
                 refreshed += 1
             else:
                 failed += 1
+        logger.info(
+            "Metadata batch refresh completed",
+            extra={
+                "job_id": job_id,
+                "refreshed": refreshed,
+                "failed": failed,
+            },
+        )
         return {
             "refreshed": refreshed,
             "failed": failed,
