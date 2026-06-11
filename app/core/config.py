@@ -13,6 +13,9 @@ class Settings(BaseSettings):
     DEBUG: bool = False
     API_PREFIX: str = "/api"
 
+    LOG_LEVEL: str = "INFO"
+    LOG_FORMAT: str = "json"
+
     TWITCH_CLIENT_ID: str = ""
     TWITCH_CLIENT_SECRET: str = ""
 

@@ -1,15 +1,24 @@
 import time
 from datetime import datetime, UTC
+from sqlalchemy.orm import Session
+
 
 from celery import Celery
-from sqlalchemy.orm import Session
 from celery.schedules import crontab
+from celery.signals import setup_logging
 
 from app.core.config import settings
 from app.db.session import SessionLocal
 from app.models.job_history import JobHistory
 from app.repositories.job_history import JobHistoryRepository
 from app.utils.enums import JobStatus
+from app.core.logging import setup_logging as configure_logging
+
+configure_logging()
+
+@setup_logging.connect
+def configure_celery_logging(*args, **kwargs):
+    configure_logging()
 
 celery_app = Celery(
     "ludexis",
@@ -23,6 +32,7 @@ celery_app.conf.update(
     timezone="UTC",
     enable_utc=True,
     broker_connection_retry_on_startup=True,
+    worker_hijack_root_logger=False,
 )
 
 
