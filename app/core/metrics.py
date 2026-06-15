@@ -30,11 +30,6 @@ artwork_downloads_total = Counter(
     "Total artwork downloads completed",
 )
 
-artwork_downloads_total = Counter(
-    "ludexis_artwork_downloads_total",
-    "Artwork downloads completed",
-)
-
 artwork_validation_failures_total = Counter(
     "ludexis_artwork_validation_failures_total",
     "Artwork validation failures",
