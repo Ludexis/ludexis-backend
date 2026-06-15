@@ -17,6 +17,12 @@ from app.utils.enums import VerificationStatus
 from app.models.screenshot import Screenshot
 
 from app.core.logging import get_logger
+from app.core.metrics import (
+    artwork_downloads_total,
+    artwork_validation_failures_total,
+    artwork_deduplications_total,
+    artwork_auto_download_runs_total,
+)
 
 logger = get_logger(__name__)
 
@@ -201,6 +207,7 @@ class ArtworkService:
         entry.cover_path = (
             stored_path
         )
+        artwork_downloads_total.inc()
         logger.info(
             "Cover artwork downloaded",
             extra={
@@ -278,6 +285,7 @@ class ArtworkService:
         db.add(entry)
         db.commit()
         db.refresh(entry)
+        artwork_downloads_total.inc()
         logger.info(
             "Banner artwork downloaded",
             extra={
@@ -352,6 +360,7 @@ class ArtworkService:
         db.add(entry)
         db.commit()
         db.refresh(entry)
+        artwork_downloads_total.inc()
         logger.info(
             "Logo artwork downloaded",
             extra={
@@ -395,6 +404,7 @@ class ArtworkService:
         db.add(entry)
         db.commit()
         db.refresh(entry)
+        artwork_downloads_total.inc()
         logger.info(
             "Screenshot artwork downloaded",
             extra={
@@ -406,6 +416,7 @@ class ArtworkService:
         return True
 
     def auto_download_missing_artwork(self, db: Session,) -> dict:
+        artwork_auto_download_runs_total.inc()
         entries = (
             self.entry_repo
             .list_active(db)
@@ -445,6 +456,7 @@ class ArtworkService:
 
             except Exception:
                 failed += 1
+                artwork_validation_failures_total.inc()
                 logger.warning(
                     "Artwork download failed",
                     extra={
@@ -995,6 +1007,7 @@ class ArtworkService:
                 archive
             )
         db.commit()
+        artwork_deduplications_total.inc()
         logger.info(
             "Artwork deduplication completed",
             extra={

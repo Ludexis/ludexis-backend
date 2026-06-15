@@ -15,7 +15,9 @@ from sqlalchemy.orm import Session
 from app.models.job_history import JobHistory
 from app.utils.enums import JobStatus
 from app.repositories.library import LibraryRepository
+
 from app.core.logging import get_logger
+from app.core.metrics import library_scans_total, incremental_scans_total
 
 logger = get_logger(__name__)
 
@@ -112,6 +114,7 @@ class ScannerService:
         return stats
 
     def scan_full(self, db: Session, scan_root: str | None = None, job_id: str | None = None,) -> dict[str, int]:
+        library_scans_total.inc()
         logger.info(
             "Full scan started",
             extra={
@@ -191,6 +194,7 @@ class ScannerService:
         return stats
 
     def scan_incremental(self, db: Session, scan_root: str | None = None, job_id: str | None = None,) -> dict[str, int]:
+        incremental_scans_total.inc()
         logger.info(
             "Incremental scan started",
             extra={

@@ -1,15 +1,10 @@
-from fastapi import APIRouter
-from sqlalchemy import text
-from sqlalchemy.orm import Session
-from fastapi import Depends
+from fastapi import APIRouter, Depends, HTTPException
 from redis import Redis
 from sqlalchemy import text
 from sqlalchemy.orm import Session
-from fastapi import APIRouter, Depends
 
 from app.core.config import settings
 from app.db.session import get_db
-
 
 router = APIRouter(
     prefix="/health",
@@ -29,15 +24,30 @@ def database_health(db: Session = Depends(get_db)):
         return {"database": "healthy"}
 
     except Exception as exc:
-        return {"database": "unhealthy", "error": str(exc)}
-    
-    
+        raise HTTPException(
+            status_code=503,
+            detail={
+                "database": "unhealthy",
+                "error": str(exc),
+            },
+        ) from exc
+
+
 @router.get("/redis")
 def redis_health():
     try:
-        redis_client = Redis.from_url(str(settings.REDIS_URL))
+        redis_client = Redis.from_url(
+            str(settings.REDIS_URL)
+        )
         redis_client.ping()
+
         return {"redis": "healthy"}
 
     except Exception as exc:
-        return {"redis": "unhealthy", "error": str(exc)}
+        raise HTTPException(
+            status_code=503,
+            detail={
+                "redis": "unhealthy",
+                "error": str(exc),
+            },
+        ) from exc

@@ -10,6 +10,7 @@ from app.models.refresh_token import RefreshToken
 from app.models.user import User
 from app.repositories.refresh_token import RefreshTokenRepository
 from app.repositories.user import UserRepository
+from app.core.metrics import auth_login_success_total, auth_login_failure_total
 
 logger = get_logger(__name__)
 
@@ -22,17 +23,21 @@ class AuthService:
     def authenticate(self, db: Session, username: str, password: str) -> User | None:
         user = self.user_repo.get_by_username(db, username)
         if not user:
-            logger.warning(
-                "Authentication failed",
-                extra={"username": username, "reason": "user_not_found"},
-            )
-            return None
+            if not user:
+                auth_login_failure_total.inc()
+                logger.warning(
+                    "Authentication failed",
+                    extra={"username": username, "reason": "user_not_found"},
+                )
+                return None
         if not verify_password(password, user.hashed_password):
+            auth_login_failure_total.inc()
             logger.warning(
                 "Authentication failed",
                 extra={"username": username, "reason": "invalid_password"},
             )
             return None
+        auth_login_success_total.inc()
         logger.info(
             "Authentication succeeded",
             extra={"user_id": user.id, "username": user.username},

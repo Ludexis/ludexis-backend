@@ -20,6 +20,7 @@ from app.repositories.developer import DeveloperRepository
 from app.repositories.publisher import PublisherRepository
 
 from app.core.logging import get_logger
+from app.core.metrics import metadata_searches_total
 
 logger = get_logger(__name__)
 
@@ -223,6 +224,7 @@ class MetadataService:
         return (archive.metadata_status!= MetadataStatus.UNMATCHED)
 
     def search(self, query: str, preferred_providers: list[str] | None = None, limit: int = 20) -> list[MetadataSearchResult]:
+        metadata_searches_total.inc()
         logger.info(
             "Metadata search started",
             extra={
