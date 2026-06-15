@@ -20,7 +20,7 @@
 
 ---
 
-## Security & RBAC
+## ✅~~Security & RBAC~~
 
 ### ✅~~High Priority~~
 
@@ -30,7 +30,7 @@
 - ✅~~Create administrator role automatically during first-time setup.~~
 - ✅~~Validate permission enforcement across all protected endpoints.~~
 
-### Medium Priority
+### ✅~~Medium Priority~~
 
 - ✅~~Add permission audit reporting.~~
 - ✅~~Expand audit logging coverage for administrative actions.~~
@@ -149,19 +149,19 @@
 
 ---
 
-## Infrastructure
+## ✅~~Infrastructure~~
 
-### Medium Priority
+### ✅~~Medium Priority~~
 
 - ✅~~Move all runtime configuration fully into environment variables.~~
 - ✅~~Remove remaining hardcoded development defaults.~~
 - ✅~~Review Docker production deployment configuration.~~
 - ✅~~Add CI/CD validation pipeline.~~
 
-### Low Priority
+### ✅~~Low Priority~~
 
 - ✅~~Health check endpoints.~~
-- Metrics and monitoring integration.
+- ✅~~Metrics and monitoring integration.~~
 - ✅~~Structured logging improvements.~~
 
 ---
@@ -184,3 +184,9 @@
 - Load testing for search and scan operations.
 
 ---
+
+## Future Improvements
+
+### Monitoring Improvements
+
+- Migrate Celery metrics to Pushgateway (Expose job statistics from PostgreSQL, Implement Prometheus multiprocess mode)
