@@ -166,7 +166,7 @@
 
 ---
 
-## Testing
+## ✅~~Testing~~
 
 ### ✅~~High Priority~~
 
@@ -176,12 +176,7 @@
 - ✅~~Scanner integration tests.~~
 - ✅~~Metadata provider tests.~~
 - ✅~~Background job tests.~~
-
-### Medium Priority
-
 - ✅~~End-to-end API test suite.~~
-- Performance testing for large libraries.
-- Load testing for search and scan operations.
 
 ---
 

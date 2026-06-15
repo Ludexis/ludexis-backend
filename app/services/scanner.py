@@ -300,7 +300,7 @@ class ScannerService:
 
     def _scan_file(self, path: Path) -> ArchiveScanItem:
         stat = path.stat()
-        file_hash = self._compute_file_hash(path)
+        file_hash = None
         parsed = parse_archive_name(path.name)
         file_size = stat.st_size
         modified_time = datetime.fromtimestamp(stat.st_mtime, tz=timezone.utc,)
@@ -364,6 +364,7 @@ class ScannerService:
                     or
                     existing_by_path.file_hash is None
                 ):
+                    self._ensure_file_hash(item)
                     self.repo.update(
                         db,
                         existing_by_path,
@@ -375,7 +376,8 @@ class ScannerService:
                     )
 
                 continue
-
+            
+            self._ensure_file_hash(item)
             existing_by_hash = None
             if item.file_hash:
                 existing_by_hash = self.repo.get_by_hash(
@@ -440,3 +442,12 @@ class ScannerService:
                 stats["unmatched"] += 1
 
         return stats
+    
+    def _ensure_file_hash(
+        self,
+        item: ArchiveScanItem,
+    ) -> None:
+        if item.file_hash is None:
+            item.file_hash = self._compute_file_hash(
+                Path(item.file_path)
+            )

@@ -132,3 +132,17 @@ class ArchiveEntryRepository(BaseRepository[ArchiveEntry]):
 
         query_builder = query_builder.filter(*filters).distinct().offset(offset).limit(limit)
         return query_builder.all()
+    
+    def get_all_by_hash(
+        self,
+        db: Session,
+        file_hash: str,
+    ) -> list[ArchiveEntry]:
+        return (
+            db.query(ArchiveEntry)
+            .filter(
+                ArchiveEntry.file_hash == file_hash,
+                ArchiveEntry.deleted_at.is_(None),
+            )
+            .all()
+        )
