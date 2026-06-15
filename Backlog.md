@@ -1,8 +1,8 @@
-# Backlog
+# ✅~~Backlog~~
 
-## Authentication & Authorization
+## ✅~~Authentication & Authorization~~
 
-### ✅High Priority
+### ✅~~High Priority~~
 
 - ✅~~Fix Swagger OAuth2 integration mismatch (Swagger expects OAuth2 Password Flow form data while backend login endpoint currently accepts JSON payloads).~~
 - ✅~~Replace development JWT secret with a generated production-grade secret.~~
@@ -13,9 +13,9 @@
   - ~~bcrypt >=5.0.0 is incompatible with passlib 1.7.4 and breaks authentication.~~
 - ✅~~Add automated integration tests for authentication, token refresh, logout, and authorization flows.~~
 
-### Low Priority
+### ✅~~Low Priority~~
 
-- Improve Swagger authorization experience for protected endpoints.
+- ✅~~Improve Swagger authorization experience for protected endpoints.~~
 - ✅~~Add token expiration and refresh workflow tests.~~
 
 ---
@@ -134,18 +134,18 @@
 
 ---
 
-## API & Documentation
+## ✅~~API & Documentation~~
 
 ### ✅~~High Priority~~
 
 - ✅~~Fix Swagger OAuth2 flow compatibility.~~
 
-### Medium Priority
+### ✅~~Medium Priority~~
 
 - ✅~~Improve OpenAPI examples.~~
 - ✅~~Expand endpoint documentation.~~
 - ✅~~Add API usage guides.~~
-- Add developer integration examples.
+- ✅~~Add developer integration examples.~~
 
 ---
 
@@ -177,11 +177,3 @@
 - ✅~~Metadata provider tests.~~
 - ✅~~Background job tests.~~
 - ✅~~End-to-end API test suite.~~
-
----
-
-## Future Improvements
-
-### Monitoring Improvements
-
-- Migrate Celery metrics to Pushgateway (Expose job statistics from PostgreSQL, Implement Prometheus multiprocess mode)

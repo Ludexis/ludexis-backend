@@ -20,7 +20,6 @@ oauth2_scheme_optional = OAuth2PasswordBearer(
     tokenUrl="/api/auth/token",
     auto_error=False,
 )
-oauth2_scheme_optional = OAuth2PasswordBearer(tokenUrl="/api/auth/login", auto_error=False)
 user_repo = UserRepository()
 
 
