@@ -443,11 +443,29 @@ class ScannerService:
 
         return stats
     
-    def _ensure_file_hash(
-        self,
-        item: ArchiveScanItem,
-    ) -> None:
+    def _ensure_file_hash(self, item: ArchiveScanItem,) -> None:
         if item.file_hash is None:
             item.file_hash = self._compute_file_hash(
                 Path(item.file_path)
             )
+    
+    def find_duplicates(self, db: Session,) -> list[dict]:
+        entries = self.repo.list_with_hashes(db)
+        grouped: dict[str, list] = {}
+        for entry in entries:
+            grouped.setdefault(
+                entry.file_hash,
+                [],
+            ).append(entry)
+        duplicates = []
+
+        for file_hash, matches in grouped.items():
+            if len(matches) > 1:
+                duplicates.append(
+                    {
+                        "file_hash": file_hash,
+                        "count": len(matches),
+                        "entries": matches,
+                    }
+                )
+        return duplicates

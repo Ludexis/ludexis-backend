@@ -103,7 +103,7 @@
 
 ---
 
-## Scanner & Ingestion
+## ✅~~Scanner & Ingestion~~
 
 ### ✅~~Planned~~
 
@@ -113,10 +113,10 @@
 - ✅~~Archive integrity verification.~~
 - ✅~~File move/rename detection.~~
 
-### Low Priority
+### ✅~~Low Priority~~
 
-- Reuse hash instead of recalculating at every scan.
-- `get_all_by_hash()` duplicate detection.
+- ✅~~Reuse hash instead of recalculating at every scan.~~
+- ✅~~`get_all_by_hash()` duplicate detection.~~
 - ❌~~Parallel scan execution (deferred, not needed unless library size is extremely large, also hardware might bottleneck).~~
 
 ---

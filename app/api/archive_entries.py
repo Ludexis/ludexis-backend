@@ -7,10 +7,14 @@ from app.schemas.archive_entry import ArchiveEntryCreate, ArchiveEntryRead, Arch
 from app.services.archive_entry import ArchiveEntryService
 from app.services.audit import AuditService
 from app.utils.enums import PermissionName
+from app.services.scanner import ScannerService
+from app.schemas.duplicates import DuplicateGroup
+
 
 router = APIRouter(prefix="/archive-entries", tags=["archive_entries"])
 service = ArchiveEntryService()
 audit_service = AuditService()
+scanner_service = ScannerService()
 
 
 @router.get(
@@ -28,6 +32,19 @@ def list_archive_entries(
 ):
     return service.list_entries(db, offset=offset, limit=limit)
 
+@router.get(
+    "/duplicates",
+    response_model=list[DuplicateGroup],
+    summary="Find duplicate archives",
+    description="Return archive entries sharing identical file hashes.",
+)
+def list_duplicates(
+    current_user=Depends(get_current_active_user),
+    db: Session = Depends(get_db),
+):
+    duplicates = scanner_service.find_duplicates(db)
+
+    return duplicates
 
 @router.get(
     "/{archive_entry_id}",
@@ -174,3 +191,4 @@ def delete_archive_entry(
         entity_id=entry.id,
         details=f"Deleted archive entry {entry.title}",
     )
+

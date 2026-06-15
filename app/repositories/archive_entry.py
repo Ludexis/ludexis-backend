@@ -146,3 +146,16 @@ class ArchiveEntryRepository(BaseRepository[ArchiveEntry]):
             )
             .all()
         )
+
+    def list_with_hashes(
+        self,
+        db: Session,
+    ) -> list[ArchiveEntry]:
+        return (
+            db.query(ArchiveEntry)
+            .filter(
+                ArchiveEntry.deleted_at.is_(None),
+                ArchiveEntry.file_hash.is_not(None),
+            )
+            .all()
+        )
