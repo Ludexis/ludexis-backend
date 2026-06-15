@@ -125,6 +125,23 @@ services:
     depends_on:
       - prometheus
 
+  node-exporter:
+    image: prom/node-exporter:latest
+    restart: unless-stopped
+
+    ports:
+      - "9100:9100"
+
+  windows-exporter:
+    image: prometheuscommunity/windows-exporter:latest
+    restart: unless-stopped
+
+    profiles:
+      - windows_exporter
+
+    ports:
+      - "9182:9182"
+
 volumes:
   db_data:
   redis_data:

@@ -29,6 +29,25 @@ services:
     depends_on:
       - prometheus
 
+  node-exporter:
+    image: prom/node-exporter:latest
+    container_name: ludexis-node-exporter
+    restart: unless-stopped
+
+    ports:
+      - "9100:9100"
+
+  windows-exporter:
+    image: prometheuscommunity/windows-exporter:latest
+    container_name: ludexis-windows-exporter
+    restart: unless-stopped
+
+    profiles:
+      - windows_exporter
+
+    ports:
+      - "9182:9182"
+
 volumes:
   prometheus_data:
   grafana_data:
