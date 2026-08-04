@@ -1,11 +1,13 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 from prometheus_fastapi_instrumentator import Instrumentator
 
 from app.api import api_router
 from app.core.config import settings
 from app.core.logging import setup_logging
 from app.db.session import engine
+from app.services.storage import StorageService
 
 setup_logging()
 
@@ -24,6 +26,10 @@ app.add_middleware(
 )
 
 app.include_router(api_router)
+
+media_dir = StorageService().base_dir
+media_dir.mkdir(parents=True, exist_ok=True)
+app.mount("/media", StaticFiles(directory=str(media_dir)), name="media")
 
 Instrumentator().instrument(app).expose(
     app,

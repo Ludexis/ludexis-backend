@@ -4,17 +4,20 @@ from sqlalchemy.orm import Session
 from app.core.auth import get_current_active_user, require_permission
 from app.db.session import get_db
 from app.schemas.archive_entry import ArchiveEntryCreate, ArchiveEntryRead, ArchiveEntryUpdate, ArchiveMetadataUpdate
+from app.schemas.screenshot import ScreenshotRead
 from app.services.archive_entry import ArchiveEntryService
 from app.services.audit import AuditService
 from app.utils.enums import PermissionName
 from app.services.scanner import ScannerService
 from app.schemas.duplicates import DuplicateGroup
+from app.repositories.screenshot import ScreenshotRepository
 
 
 router = APIRouter(prefix="/archive-entries", tags=["archive_entries"])
 service = ArchiveEntryService()
 audit_service = AuditService()
 scanner_service = ScannerService()
+screenshot_repo = ScreenshotRepository()
 
 
 @router.get(
@@ -45,6 +48,23 @@ def list_duplicates(
     duplicates = scanner_service.find_duplicates(db)
 
     return duplicates
+
+@router.get(
+    "/{archive_entry_id}/screenshots",
+    response_model=list[ScreenshotRead],
+    summary="List screenshots",
+    description="Return screenshots for an archive entry.",
+)
+def list_screenshots(
+    archive_entry_id: str,
+    current_user=Depends(get_current_active_user),
+    db: Session = Depends(get_db),
+):
+    entry = service.get(db, archive_entry_id)
+    if entry is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Archive entry not found")
+    return screenshot_repo.list_by_entry(db, archive_entry_id)
+
 
 @router.get(
     "/{archive_entry_id}",

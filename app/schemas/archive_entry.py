@@ -37,6 +37,7 @@ class ArchiveEntryBase(BaseModel):
     metadata_source: str | None = None
     metadata_source_code: str | None = None
     metadata_override: bool = False
+    metadata_confidence: float | None = None
     verification_status: VerificationStatus = VerificationStatus.UNKNOWN
     parent_series_id: str | None = None
     franchise_id: str | None = None

@@ -161,6 +161,7 @@ class MetadataService:
             archive.metadata_status = (
                 MetadataStatus.UNMATCHED
             )
+            archive.metadata_confidence = 0.0
             archive.last_metadata_refresh = (
                 datetime.now(UTC)
             )
@@ -186,6 +187,10 @@ class MetadataService:
             archive.metadata_status = (
                 MetadataStatus.UNMATCHED
             )
+        archive.metadata_confidence = round(
+            score,
+            3,
+        )
         archive.metadata_source = (
             match.provider
         )
