@@ -1,3 +1,4 @@
+import json
 from pathlib import Path
 from typing import List
 
@@ -47,7 +48,13 @@ class Settings(BaseSettings):
 
     @property
     def cors_origins_list(self) -> List[str]:
-        return [origin.strip() for origin in self.CORS_ORIGINS.split(",") if origin.strip()]
+        value = self.CORS_ORIGINS.strip()
+        if value.startswith("[") and value.endswith("]"):
+            try:
+                return [origin.strip() for origin in json.loads(value)]
+            except json.JSONDecodeError:
+                pass
+        return [origin.strip() for origin in value.split(",") if origin.strip()]
 
 
 settings = Settings()
