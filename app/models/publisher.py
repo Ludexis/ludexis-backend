@@ -9,6 +9,9 @@ from app.db.base import Base
 class Publisher(Base):
     __tablename__ = "publishers"
     __allow_unmapped__ = True
+    __table_args__ = (
+        sa.Index("ix_publishers_name_trgm", "name", postgresql_using="gin", postgresql_ops={"name": "gin_trgm_ops"}),
+    )
 
     id: str = mapped_column(sa.String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     name: str = mapped_column(sa.String(256), unique=True, nullable=False)

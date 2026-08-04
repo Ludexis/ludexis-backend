@@ -18,6 +18,11 @@ from app.utils.enums import MetadataStatus, VerificationStatus
 class ArchiveEntry(Base):
     __tablename__ = "archive_entries"
     __allow_unmapped__ = True
+    __table_args__ = (
+        sa.Index("ix_archive_entries_title_trgm", "title", postgresql_using="gin", postgresql_ops={"title": "gin_trgm_ops"}),
+        sa.Index("ix_archive_entries_description_trgm", "description", postgresql_using="gin", postgresql_ops={"description": "gin_trgm_ops"}),
+        sa.Index("ix_archive_entries_id_covering_deleted_at", "id", postgresql_include=["deleted_at"]),
+    )
 
     id: str = mapped_column(sa.String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     title: str = mapped_column(sa.String(256), nullable=False)
@@ -44,7 +49,7 @@ class ArchiveEntry(Base):
     last_verified = mapped_column(sa.DateTime(timezone=True), nullable=True)
     verification_status: VerificationStatus = mapped_column(sa.Enum(VerificationStatus, name="verification_status"), nullable=False, default=VerificationStatus.UNKNOWN)
     parent_series_id = mapped_column(sa.String(36), sa.ForeignKey("archive_entries.id", ondelete="SET NULL"), nullable=True)
-    franchise_id = mapped_column(sa.String(36), sa.ForeignKey("franchises.id", ondelete="SET NULL"), nullable=True)
+    franchise_id = mapped_column(sa.String(36), sa.ForeignKey("franchises.id", ondelete="SET NULL"), nullable=True, index=True)
     library_id = mapped_column(
         sa.String(36),
         sa.ForeignKey("libraries.id", ondelete="SET NULL"),

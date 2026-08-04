@@ -3,6 +3,12 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.models.archive_entry import ArchiveEntry
+from app.models.association_tables import (
+    archive_entry_developers,
+    archive_entry_publishers,
+    archive_entry_tags,
+    collection_entries,
+)
 from app.models.collection import Collection
 from app.models.developer import Developer
 from app.models.franchise import Franchise
@@ -80,46 +86,45 @@ class ArchiveEntryRepository(BaseRepository[ArchiveEntry]):
         offset: int = 0,
         limit: int = 100,
     ) -> list[ArchiveEntry]:
-        query_builder = db.query(ArchiveEntry)
-        query_builder = query_builder.outerjoin(ArchiveEntry.genres)
-        query_builder = query_builder.outerjoin(ArchiveEntry.tags)
-        query_builder = query_builder.outerjoin(ArchiveEntry.developers)
-        query_builder = query_builder.outerjoin(ArchiveEntry.publishers)
-        query_builder = query_builder.outerjoin(ArchiveEntry.collections)
-        query_builder = query_builder.outerjoin(ArchiveEntry.franchise)
-
         filters = [ArchiveEntry.deleted_at.is_(None)]
 
         if query:
             search_value = f"%{query}%"
-            filters.append(
-                sa.or_(
-                    ArchiveEntry.title.ilike(search_value),
-                    ArchiveEntry.description.ilike(search_value),
-                    Collection.name.ilike(search_value),
-                    Developer.name.ilike(search_value),
-                    Publisher.name.ilike(search_value),
-                    Tag.name.ilike(search_value),
-                )
-            )
+            text_matches = sa.union(
+                sa.select(ArchiveEntry.id.label("id")).where(ArchiveEntry.title.ilike(search_value)),
+                sa.select(ArchiveEntry.id.label("id")).where(ArchiveEntry.description.ilike(search_value)),
+                sa.select(collection_entries.c.archive_entry_id.label("id"))
+                .select_from(collection_entries.join(Collection, Collection.id == collection_entries.c.collection_id))
+                .where(Collection.name.ilike(search_value)),
+                sa.select(archive_entry_developers.c.archive_entry_id.label("id"))
+                .select_from(archive_entry_developers.join(Developer, Developer.id == archive_entry_developers.c.developer_id))
+                .where(Developer.name.ilike(search_value)),
+                sa.select(archive_entry_publishers.c.archive_entry_id.label("id"))
+                .select_from(archive_entry_publishers.join(Publisher, Publisher.id == archive_entry_publishers.c.publisher_id))
+                .where(Publisher.name.ilike(search_value)),
+                sa.select(archive_entry_tags.c.archive_entry_id.label("id"))
+                .select_from(archive_entry_tags.join(Tag, Tag.id == archive_entry_tags.c.tag_id))
+                .where(Tag.name.ilike(search_value)),
+            ).subquery()
+            filters.append(ArchiveEntry.id.in_(sa.select(text_matches.c.id)))
 
         if genre:
-            filters.append(Genre.name == genre)
+            filters.append(ArchiveEntry.genres.any(Genre.name == genre))
 
         if tag:
-            filters.append(Tag.name == tag)
+            filters.append(ArchiveEntry.tags.any(Tag.name == tag))
 
         if developer:
-            filters.append(Developer.name == developer)
+            filters.append(ArchiveEntry.developers.any(Developer.name == developer))
 
         if publisher:
-            filters.append(Publisher.name == publisher)
+            filters.append(ArchiveEntry.publishers.any(Publisher.name == publisher))
 
         if collection:
-            filters.append(Collection.name == collection)
+            filters.append(ArchiveEntry.collections.any(Collection.name == collection))
 
         if franchise:
-            filters.append(Franchise.name == franchise)
+            filters.append(ArchiveEntry.franchise.has(Franchise.name == franchise))
 
         if metadata_status:
             filters.append(ArchiveEntry.metadata_status == metadata_status)
@@ -130,8 +135,13 @@ class ArchiveEntryRepository(BaseRepository[ArchiveEntry]):
         if storage_device:
             filters.append(ArchiveEntry.storage_device.ilike(f"%{storage_device}%"))
 
-        query_builder = query_builder.filter(*filters).distinct().offset(offset).limit(limit)
-        return query_builder.all()
+        return (
+            db.query(ArchiveEntry)
+            .filter(*filters)
+            .offset(offset)
+            .limit(limit)
+            .all()
+        )
     
     def get_all_by_hash(
         self,

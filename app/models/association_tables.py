@@ -10,6 +10,7 @@ archive_entry_genres = Table(
     sa.Column("archive_entry_id", sa.ForeignKey("archive_entries.id", ondelete="CASCADE"), primary_key=True),
     sa.Column("genre_id", sa.ForeignKey("genres.id", ondelete="CASCADE"), primary_key=True),
 )
+sa.Index("ix_archive_entry_genres_genre_id", archive_entry_genres.c.genre_id)
 
 archive_entry_tags = Table(
     "archive_entry_tags",
@@ -17,6 +18,7 @@ archive_entry_tags = Table(
     sa.Column("archive_entry_id", sa.ForeignKey("archive_entries.id", ondelete="CASCADE"), primary_key=True),
     sa.Column("tag_id", sa.ForeignKey("tags.id", ondelete="CASCADE"), primary_key=True),
 )
+sa.Index("ix_archive_entry_tags_tag_id", archive_entry_tags.c.tag_id)
 
 archive_entry_developers = Table(
     "archive_entry_developers",
@@ -24,6 +26,7 @@ archive_entry_developers = Table(
     sa.Column("archive_entry_id", sa.ForeignKey("archive_entries.id", ondelete="CASCADE"), primary_key=True),
     sa.Column("developer_id", sa.ForeignKey("developers.id", ondelete="CASCADE"), primary_key=True),
 )
+sa.Index("ix_archive_entry_developers_developer_id", archive_entry_developers.c.developer_id)
 
 archive_entry_publishers = Table(
     "archive_entry_publishers",
@@ -31,6 +34,7 @@ archive_entry_publishers = Table(
     sa.Column("archive_entry_id", sa.ForeignKey("archive_entries.id", ondelete="CASCADE"), primary_key=True),
     sa.Column("publisher_id", sa.ForeignKey("publishers.id", ondelete="CASCADE"), primary_key=True),
 )
+sa.Index("ix_archive_entry_publishers_publisher_id", archive_entry_publishers.c.publisher_id)
 
 collection_entries = Table(
     "collection_entries",
@@ -38,6 +42,7 @@ collection_entries = Table(
     sa.Column("collection_id", sa.ForeignKey("collections.id", ondelete="CASCADE"), primary_key=True),
     sa.Column("archive_entry_id", sa.ForeignKey("archive_entries.id", ondelete="CASCADE"), primary_key=True),
 )
+sa.Index("ix_collection_entries_archive_entry_id", collection_entries.c.archive_entry_id)
 
 franchise_entries = Table(
     "franchise_entries",

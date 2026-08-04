@@ -43,6 +43,7 @@ class FranchiseUpdate(BaseModel):
 class FranchiseRead(FranchiseBase):
     id: str
     child_ids: list[str] = []
+    entry_count: int = 0
 
     model_config = {
         "from_attributes": True,

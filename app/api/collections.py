@@ -25,8 +25,9 @@ def list_collections(
     db: Session = Depends(get_db),
     offset: int = 0,
     limit: int = 100,
+    q: str | None = None,
 ):
-    return service.list_items(db, offset=offset, limit=limit)
+    return service.list_items(db, offset=offset, limit=limit, q=q)
 
 
 @router.get(

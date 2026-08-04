@@ -9,11 +9,21 @@ class FranchiseService:
     def __init__(self) -> None:
         self.repo = FranchiseRepository()
 
-    def list_items(self, db: Session, offset: int = 0, limit: int = 100) -> list[Franchise]:
-        return self.repo.list_items(db, offset=offset, limit=limit)
+    def list_items(self, db: Session, offset: int = 0, limit: int = 100, q: str | None = None) -> list[Franchise]:
+        franchises = self.repo.list_items(db, offset=offset, limit=limit, q=q)
+        counts = self.repo.count_entries_for_ids(db, [franchise.id for franchise in franchises])
+        for franchise in franchises:
+            franchise.entry_count = counts.get(franchise.id, 0)
+        return franchises
+
+    def count(self, db: Session, q: str | None = None) -> int:
+        return self.repo.count(db, q=q)
 
     def get(self, db: Session, franchise_id: str) -> Franchise | None:
-        return self.repo.get(db, franchise_id)
+        franchise = self.repo.get(db, franchise_id)
+        if franchise is not None:
+            franchise.entry_count = self.repo.count_entries_for_id(db, franchise_id)
+        return franchise
 
     def create(self, db: Session, data: FranchiseCreate) -> Franchise:
         franchise_data = data.model_dump(exclude={"child_ids"})

@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Response, status
 from sqlalchemy.orm import Session
 
 from app.core.auth import get_current_active_user, require_permission
@@ -21,12 +21,16 @@ audit_service = AuditService()
     response_description="Developers retrieved.",
 )
 def list_developers(
+    response: Response,
     current_user=Depends(get_current_active_user),
     db: Session = Depends(get_db),
     offset: int = 0,
     limit: int = 100,
+    q: str | None = None,
 ):
-    return service.list_items(db, offset=offset, limit=limit)
+    items = service.list_items(db, offset=offset, limit=limit, q=q)
+    response.headers["X-Total-Count"] = str(service.count(db, q=q))
+    return items
 
 
 @router.get(

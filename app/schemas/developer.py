@@ -40,6 +40,7 @@ class DeveloperUpdate(BaseModel):
 
 class DeveloperRead(DeveloperBase):
     id: str
+    entry_count: int = 0
 
     model_config = {
         "from_attributes": True,

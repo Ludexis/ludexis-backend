@@ -10,6 +10,9 @@ from app.models.association_tables import collection_entries
 class Collection(Base):
     __tablename__ = "collections"
     __allow_unmapped__ = True
+    __table_args__ = (
+        sa.Index("ix_collections_name_trgm", "name", postgresql_using="gin", postgresql_ops={"name": "gin_trgm_ops"}),
+    )
 
     id: str = mapped_column(sa.String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     name: str = mapped_column(sa.String(256), nullable=False)
