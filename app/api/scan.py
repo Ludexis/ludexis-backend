@@ -75,14 +75,13 @@ def read_scan_status(
     current_user=Depends(get_current_active_user),
     db: Session = Depends(get_db),
 ):
-    jobs = job_repo.list_items(db)
-    scan_jobs = [job for job in jobs if job.job_type in {JobType.LIBRARY_SCAN, JobType.INCREMENTAL_SCAN}]
+    counts_by_status = job_repo.count_by_status(db, [JobType.LIBRARY_SCAN, JobType.INCREMENTAL_SCAN])
     counts = {
-        "pending": sum(1 for job in scan_jobs if job.status == JobStatus.PENDING),
-        "running": sum(1 for job in scan_jobs if job.status == JobStatus.RUNNING),
-        "success": sum(1 for job in scan_jobs if job.status == JobStatus.SUCCESS),
-        "failed": sum(1 for job in scan_jobs if job.status == JobStatus.FAILED),
-        "canceled": sum(1 for job in scan_jobs if job.status == JobStatus.CANCELED),
+        "pending": counts_by_status.get(JobStatus.PENDING, 0),
+        "running": counts_by_status.get(JobStatus.RUNNING, 0),
+        "success": counts_by_status.get(JobStatus.SUCCESS, 0),
+        "failed": counts_by_status.get(JobStatus.FAILED, 0),
+        "canceled": counts_by_status.get(JobStatus.CANCELED, 0),
     }
-    counts["total"] = len(scan_jobs)
+    counts["total"] = sum(counts.values())
     return ScanStatus(**counts)

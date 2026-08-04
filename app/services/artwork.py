@@ -534,6 +534,8 @@ class ArtworkService:
             screenshot = self.screenshot_repo.get(db, screenshot_id)
             if screenshot is None:
                 raise ValueError("Screenshot not found")
+            if screenshot.archive_entry_id != archive_entry_id:
+                raise ValueError("Screenshot does not belong to the given archive entry")
             self.storage.delete(screenshot.file_path)
             relative_path = build_artwork_relative_path(archive_entry_id, artwork_type, file.filename)
             screenshot.file_path = self.storage.save(relative_path, contents)

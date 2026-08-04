@@ -1,3 +1,4 @@
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.models.job_history import JobHistory
@@ -15,6 +16,15 @@ class JobHistoryRepository(BaseRepository[JobHistory]):
         if status is not None:
             query = query.filter(JobHistory.status == status)
         return query.order_by(JobHistory.started_at.desc()).offset(offset).limit(limit).all()
+
+    def count_by_status(self, db: Session, job_types: list) -> dict:
+        rows = (
+            db.query(JobHistory.status, func.count(JobHistory.id))
+            .filter(JobHistory.job_type.in_(job_types))
+            .group_by(JobHistory.status)
+            .all()
+        )
+        return dict(rows)
 
     def list_by_status(self, db: Session, status: str, offset: int = 0, limit: int = 100) -> list[JobHistory]:
         return db.query(JobHistory).filter(JobHistory.status == status).offset(offset).limit(limit).all()

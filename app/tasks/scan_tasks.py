@@ -19,6 +19,7 @@ from app.core.config import settings
 )
 def scan_full_task(self, job_history_id: str) -> str:
     db = SessionLocal()
+    job = None
     try:
         job_repo = JobHistoryRepository()
         job = job_repo.get(db, job_history_id)
@@ -71,6 +72,7 @@ def scan_full_task(self, job_history_id: str) -> str:
 )
 def scan_incremental_task(self, job_history_id: str) -> str:
     db = SessionLocal()
+    job = None
     try:
         job_repo = JobHistoryRepository()
         job = job_repo.get(db, job_history_id)

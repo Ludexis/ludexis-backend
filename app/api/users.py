@@ -243,6 +243,11 @@ def delete_user(
     current_user: User = Depends(require_permission(PermissionName.MANAGE_USERS)),
     db: Session = Depends(get_db),
 ):
+    if user_id == current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Cannot delete your own account",
+        )
     user = _get_user_or_404(db, user_id)
     user_repo.delete(db, user)
     audit_log_service.log(
@@ -267,6 +272,11 @@ def activate_user(
     current_user: User = Depends(require_permission(PermissionName.MANAGE_USERS)),
     db: Session = Depends(get_db),
 ):
+    if user_id == current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Cannot activate your own account",
+        )
     user = _get_user_or_404(db, user_id)
     return user_repo.activate(db, user)
 
@@ -283,6 +293,11 @@ def deactivate_user(
     current_user: User = Depends(require_permission(PermissionName.MANAGE_USERS)),
     db: Session = Depends(get_db),
 ):
+    if user_id == current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Cannot deactivate your own account",
+        )
     user = _get_user_or_404(db, user_id)
     return user_repo.deactivate(db, user)
 

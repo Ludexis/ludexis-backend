@@ -23,13 +23,12 @@ class AuthService:
     def authenticate(self, db: Session, username: str, password: str) -> User | None:
         user = self.user_repo.get_by_username(db, username)
         if not user:
-            if not user:
-                auth_login_failure_total.inc()
-                logger.warning(
-                    "Authentication failed",
-                    extra={"username": username, "reason": "user_not_found"},
-                )
-                return None
+            auth_login_failure_total.inc()
+            logger.warning(
+                "Authentication failed",
+                extra={"username": username, "reason": "user_not_found"},
+            )
+            return None
         if not verify_password(password, user.hashed_password):
             auth_login_failure_total.inc()
             logger.warning(

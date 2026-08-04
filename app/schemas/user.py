@@ -1,5 +1,7 @@
 from pydantic import BaseModel, EmailStr
 
+from app.schemas.role import RoleRead
+
 
 class UserBase(BaseModel):
     username: str
@@ -51,6 +53,7 @@ class UserUpdate(BaseModel):
 
 class UserRead(UserBase):
     id: str
+    roles: list[RoleRead] = []
 
     model_config = {
         "from_attributes": True,
