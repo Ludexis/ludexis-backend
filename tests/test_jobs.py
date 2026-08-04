@@ -1,5 +1,5 @@
 from unittest.mock import Mock, patch
-from app.db.session import SessionLocal
+from tests.test_db import TestingSessionLocal
 from app.models.user import User
 from app.services.job import JobService
 from app.utils.enums import JobStatus, JobType
@@ -13,7 +13,7 @@ def get_admin_user(db):
 
 
 def test_start_job_creates_pending_job():
-    db = SessionLocal()
+    db = TestingSessionLocal()
     service = JobService()
     user = get_admin_user(db)
     fake_task = Mock()
@@ -37,7 +37,7 @@ def test_start_job_creates_pending_job():
 
 
 def test_get_job():
-    db = SessionLocal()
+    db = TestingSessionLocal()
     service = JobService()
     user = get_admin_user(db)
     fake_task = Mock()
@@ -64,7 +64,7 @@ def test_get_job():
 
 
 def test_cancel_pending_job():
-    db = SessionLocal()
+    db = TestingSessionLocal()
     service = JobService()
     user = get_admin_user(db)
     fake_task = Mock()
@@ -90,7 +90,7 @@ def test_cancel_pending_job():
 
 
 def test_cancel_invalid_job():
-    db = SessionLocal()
+    db = TestingSessionLocal()
     service = JobService()
     result = service.cancel_job(
         db,
@@ -101,7 +101,7 @@ def test_cancel_invalid_job():
 
 
 def test_cancel_completed_job_does_nothing():
-    db = SessionLocal()
+    db = TestingSessionLocal()
     service = JobService()
     user = get_admin_user(db)
     fake_task = Mock()
