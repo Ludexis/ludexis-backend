@@ -104,7 +104,7 @@ def seed(db) -> list[str]:
         admin = User(
             username="admin",
             email="admin@example.com",
-            hashed_password=hash_password("admin"),
+            hashed_password=hash_password("Admin123!"),
             is_active=True,
             is_superuser=True,
         )
@@ -159,7 +159,14 @@ def seed(db) -> list[str]:
         developers[name] = developer
 
     publishers: dict[str, Publisher] = {}
-    for name in ["Bethesda", "Electronic Arts", "Activision", "Ubisoft"]:
+    for name in [
+        "Bethesda",
+        "Electronic Arts",
+        "Activision",
+        "Ubisoft",
+        "Nintendo",
+        "Extremely OK Games",
+    ]:
         publisher = db.query(Publisher).filter_by(name=name).first()
         if publisher is None:
             publisher = Publisher(name=name, description=f"Game publisher {name}")
