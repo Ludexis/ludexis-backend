@@ -62,3 +62,15 @@ def test_incremental_scan_detects_new_file(tmp_path):
     )
     assert result["created"] == 1
     db.close()
+
+def test_scan_library_with_subdirectory(tmp_path):
+    db = TestingSessionLocal()
+    game_dir = tmp_path / f"Game {uuid.uuid4().hex}"
+    game_dir.mkdir()
+    (game_dir / f"{uuid.uuid4()}.zip").write_bytes(uuid.uuid4().hex.encode())
+    result = ScannerService().scan_full(
+        db,
+        scan_root=str(tmp_path),
+    )
+    assert result["created"] == 2
+    db.close()

@@ -46,7 +46,10 @@ class ScannerService:
         self.library_repo = LibraryRepository()
         self.matcher = MatchingService()
 
-    def _compute_file_hash(self, path: Path) -> str:
+    def _compute_file_hash(self, path: Path) -> str | None:
+        # Folder entries have no single file to hash.
+        if path.is_dir():
+            return None
         sha256 = hashlib.sha256()
 
         with open(path, "rb") as f:
