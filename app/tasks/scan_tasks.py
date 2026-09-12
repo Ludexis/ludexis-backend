@@ -113,3 +113,71 @@ def scan_incremental_task(self, job_history_id: str) -> str:
         raise
     finally:
         db.close()
+
+
+def _run_scanner_job(job_history_id: str, label: str, run) -> str:
+    db = SessionLocal()
+    job = None
+    try:
+        job = JobHistoryRepository().get(db, job_history_id)
+        if job is None:
+            return "job not found"
+
+        job.status = JobStatus.RUNNING
+        job.details = f"{label} started"
+        db.add(job)
+        db.commit()
+
+        job.status = JobStatus.SUCCESS
+        job.result = f"{label} completed: {run(ScannerService(), db)}"
+        job.progress = 100
+        job.details = job.result
+        job.completed_at = datetime.now(UTC)
+        db.add(job)
+        db.commit()
+        return job.result
+    except Exception as exc:
+        if job is not None:
+            job.status = JobStatus.FAILED
+            job.details = str(exc)
+            job.result = str(exc)
+            job.completed_at = datetime.now(UTC)
+            db.add(job)
+            db.commit()
+        raise
+    finally:
+        db.close()
+
+
+@celery_app.task(
+    bind=True,
+    autoretry_for=(Exception,),
+    retry_backoff=True,
+    retry_backoff_max=settings.JOB_RETRY_BACKOFF_MAX,
+    retry_kwargs={
+        "max_retries": settings.JOB_MAX_RETRIES,
+    },
+)
+def verify_integrity_task(self, job_history_id: str) -> str:
+    return _run_scanner_job(
+        job_history_id,
+        "Integrity verification",
+        lambda scanner, db: scanner.verify_archives(db),
+    )
+
+
+@celery_app.task(
+    bind=True,
+    autoretry_for=(Exception,),
+    retry_backoff=True,
+    retry_backoff_max=settings.JOB_RETRY_BACKOFF_MAX,
+    retry_kwargs={
+        "max_retries": settings.JOB_MAX_RETRIES,
+    },
+)
+def detect_duplicates_task(self, job_history_id: str) -> str:
+    return _run_scanner_job(
+        job_history_id,
+        "Duplicate detection",
+        lambda scanner, db: {"duplicate_groups": len(scanner.find_duplicates(db))},
+    )

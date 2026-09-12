@@ -127,3 +127,14 @@ def test_cancel_completed_job_does_nothing():
     )
     assert result.status == JobStatus.SUCCESS
     db.close()
+
+def test_every_job_type_runs_a_real_task():
+    from app.tasks.metadata_tasks import refresh_metadata_task
+    from app.tasks.scan_tasks import detect_duplicates_task, verify_integrity_task
+
+    service = JobService()
+    assert service._select_task(JobType.METADATA_REFRESH) is refresh_metadata_task
+    assert service._select_task(JobType.DUPLICATE_DETECTION) is detect_duplicates_task
+    assert service._select_task(JobType.INTEGRITY_VERIFICATION) is verify_integrity_task
+    for job_type in JobType:
+        service._select_task(job_type)

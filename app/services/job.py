@@ -2,9 +2,15 @@ from datetime import datetime, UTC
 
 from app.models.user import User
 from app.repositories.job_history import JobHistoryRepository
-from app.tasks.celery_app import celery_app, run_job
-from app.tasks.scan_tasks import scan_full_task, scan_incremental_task
+from app.tasks.celery_app import celery_app
+from app.tasks.scan_tasks import (
+    detect_duplicates_task,
+    scan_full_task,
+    scan_incremental_task,
+    verify_integrity_task,
+)
 from app.tasks.artwork_tasks import validate_artwork_task
+from app.tasks.metadata_tasks import refresh_metadata_task
 from app.utils.enums import JobStatus, JobType
 from sqlalchemy.orm import Session
 
@@ -40,13 +46,14 @@ class JobService:
         return self.repo.update(db, job, {"task_id": task.id, "details": job.details})
 
     def _select_task(self, job_type: JobType):
-        if job_type == JobType.LIBRARY_SCAN:
-            return scan_full_task
-        if job_type == JobType.INCREMENTAL_SCAN:
-            return scan_incremental_task
-        if job_type == JobType.ARTWORK_REFRESH:
-            return validate_artwork_task
-        return run_job
+        return {
+            JobType.LIBRARY_SCAN: scan_full_task,
+            JobType.INCREMENTAL_SCAN: scan_incremental_task,
+            JobType.METADATA_REFRESH: refresh_metadata_task,
+            JobType.ARTWORK_REFRESH: validate_artwork_task,
+            JobType.DUPLICATE_DETECTION: detect_duplicates_task,
+            JobType.INTEGRITY_VERIFICATION: verify_integrity_task,
+        }[job_type]
 
     def cancel_job(self, db: Session, job_id: str):
         job = self.repo.get(db, job_id)
