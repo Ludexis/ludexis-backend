@@ -6,10 +6,13 @@ from app.core.auth import PermissionName
 from app.db.session import get_db
 from app.schemas.job_history import JobHistoryRead, JobHistoryCreate
 from app.services.job import JobService
+from app.services.audit import AuditService
+from app.utils.audit_actions import AuditAction
 from app.utils.enums import JobStatus, JobType
 
 router = APIRouter(prefix="/jobs", tags=["jobs"])
 service = JobService()
+audit_service = AuditService()
 
 
 @router.post(
@@ -28,6 +31,7 @@ def start_job(
     job = service.start_job(db, current_user, data.job_type)
     if job is None:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Could not start job")
+    audit_service.record(db, current_user, AuditAction.START_JOB, "JobHistory", job.id, f"Started {data.job_type.value} job")
     return job
 
 
@@ -46,6 +50,7 @@ def cancel_job(
     job = service.cancel_job(db, job_id)
     if job is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Job not found")
+    audit_service.record(db, current_user, AuditAction.CANCEL_JOB, "JobHistory", job.id, f"Cancel requested for {job.job_type.value} job")
     return job
 
 

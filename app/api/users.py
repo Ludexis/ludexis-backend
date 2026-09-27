@@ -9,14 +9,14 @@ from app.repositories.role import RoleRepository
 from app.repositories.user import UserRepository
 from app.schemas.auth import PasswordResetRequest
 from app.schemas.user import UserCreate, UserRead, UserUpdate
-from app.services.audit_log import AuditLogService
+from app.services.audit import AuditService
 from app.utils.audit_actions import AuditAction
 from app.utils.enums import PermissionName
 
 router = APIRouter(prefix="/users", tags=["users"])
 user_repo = UserRepository()
 role_repo = RoleRepository()
-audit_log_service = AuditLogService()
+audit_log_service = AuditService()
 
 
 def _load_roles(db: Session, role_ids: list[str]) -> list:
@@ -278,7 +278,9 @@ def activate_user(
             detail="Cannot activate your own account",
         )
     user = _get_user_or_404(db, user_id)
-    return user_repo.activate(db, user)
+    user = user_repo.activate(db, user)
+    audit_log_service.log(db, AuditAction.ACTIVATE_USER, "User", user.id, current_user.id, f"Activated {user.username}")
+    return user
 
 
 @router.post(
@@ -299,7 +301,9 @@ def deactivate_user(
             detail="Cannot deactivate your own account",
         )
     user = _get_user_or_404(db, user_id)
-    return user_repo.deactivate(db, user)
+    user = user_repo.deactivate(db, user)
+    audit_log_service.log(db, AuditAction.DEACTIVATE_USER, "User", user.id, current_user.id, f"Deactivated {user.username}")
+    return user
 
 
 @router.post(
@@ -320,4 +324,5 @@ def reset_password(
     db.add(user)
     db.commit()
     db.refresh(user)
+    audit_log_service.log(db, AuditAction.RESET_PASSWORD, "User", user.id, current_user.id, f"Reset password for {user.username}")
     return user

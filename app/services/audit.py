@@ -16,8 +16,20 @@ class AuditService:
         entity_id: str | None = None,
         details: str | None = None,
     ):
+        return self.log(db, action, entity, entity_id=entity_id, user_id=user.id if user else None, details=details)
+
+    def log(
+        self,
+        db: Session,
+        action: str,
+        entity: str,
+        entity_id: str | None = None,
+        user_id: str | None = None,
+        details: str | None = None,
+    ):
+        # For callers that only have a user id, such as failed logins and token operations.
         return self.repo.create(db, {
-            "user_id": user.id if user else None,
+            "user_id": user_id,
             "action": action,
             "entity": entity,
             "entity_id": entity_id,

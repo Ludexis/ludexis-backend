@@ -7,14 +7,14 @@ from app.repositories.permission import PermissionRepository
 from app.repositories.role import RoleRepository
 from app.schemas.permission import PermissionRead
 from app.schemas.role import RoleCreate, RoleRead, RoleUpdate
-from app.services.audit_log import AuditLogService
+from app.services.audit import AuditService
 from app.utils.audit_actions import AuditAction
 from app.utils.enums import PermissionName
 
 router = APIRouter(prefix="/roles", tags=["roles"])
 role_repo = RoleRepository()
 permission_repo = PermissionRepository()
-audit_log_service = AuditLogService()
+audit_log_service = AuditService()
 
 
 def _load_permissions(db: Session, permission_ids: list[str]) -> list:

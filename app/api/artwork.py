@@ -10,10 +10,13 @@ from app.schemas.artwork import (
     ArtworkUploadResponse,
 )
 from app.services.artwork import ArtworkService
+from app.services.audit import AuditService
+from app.utils.audit_actions import AuditAction
 from app.utils.artwork import ArtworkType
 
 router = APIRouter(prefix="/artwork", tags=["artwork"])
 service = ArtworkService()
+audit_service = AuditService()
 
 
 @router.post(
@@ -34,6 +37,7 @@ def upload_artwork(
 ):
     try:
         result = service.upload_artwork(db, archive_entry_id, artwork_type, file, caption=caption)
+        audit_service.record(db, current_user, AuditAction.UPLOAD_ARTWORK, "ArchiveEntry", archive_entry_id, f"Uploaded {artwork_type.value} artwork")
         return result
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
@@ -57,6 +61,7 @@ def replace_artwork(
 ):
     try:
         result = service.replace_artwork(db, archive_entry_id, artwork_type, file, screenshot_id=screenshot_id, caption=caption)
+        audit_service.record(db, current_user, AuditAction.REPLACE_ARTWORK, "ArchiveEntry", archive_entry_id, f"Replaced {artwork_type.value} artwork")
         return result
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
@@ -77,6 +82,14 @@ def delete_artwork(
 ):
     try:
         result = service.delete_artwork(db, artwork_id, artwork_type=artwork_type)
+        audit_service.record(
+            db,
+            current_user,
+            AuditAction.DELETE_ARTWORK,
+            "Artwork",
+            artwork_id,
+            f"Deleted {artwork_type.value if artwork_type else 'screenshot'} artwork",
+        )
         return result
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
@@ -106,4 +119,6 @@ def auto_download_missing_artwork(
     current_user=Depends(require_permission(PermissionName.EDIT_METADATA)),
     db: Session = Depends(get_db),
 ):
-    return service.auto_download_missing_artwork(db)
+    result = service.auto_download_missing_artwork(db)
+    audit_service.record(db, current_user, AuditAction.AUTO_DOWNLOAD_ARTWORK, "Artwork", details=f"Auto download: {result}")
+    return result

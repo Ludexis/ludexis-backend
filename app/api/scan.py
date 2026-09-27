@@ -6,7 +6,7 @@ from app.core.auth import PermissionName
 from app.db.session import get_db
 from app.schemas.job_history import JobHistoryRead
 from app.schemas.scan import ScanStatus
-from app.services.audit_log import AuditLogService
+from app.services.audit import AuditService
 from app.services.job import JobService
 from app.repositories.job_history import JobHistoryRepository
 from app.utils.audit_actions import AuditAction
@@ -15,7 +15,7 @@ from app.utils.enums import JobType, JobStatus
 router = APIRouter(prefix="/scan", tags=["scan"])
 job_service = JobService()
 job_repo = JobHistoryRepository()
-audit_log_service = AuditLogService()
+audit_log_service = AuditService()
 
 
 @router.post(

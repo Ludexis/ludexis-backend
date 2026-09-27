@@ -5,6 +5,8 @@ from app.core.security import hash_password
 from app.db.session import get_db
 from app.repositories.user import UserRepository
 from app.schemas.user import UserCreate, UserRead
+from app.services.audit import AuditService
+from app.utils.audit_actions import AuditAction
 
 from app.models.permission import Permission
 from app.models.role import Role
@@ -131,5 +133,6 @@ def initialize_system(data: UserCreate, db: Session = Depends(get_db)):
 
     db.commit()
     db.refresh(user)
+    AuditService().record(db, user, AuditAction.INITIALIZE_SYSTEM, "User", user.id, f"System initialized with administrator {user.username}")
 
     return user

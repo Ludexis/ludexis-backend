@@ -214,3 +214,14 @@ def test_rbac_jobs_list_allowed_for_user():
 def test_unauthenticated_scan_full_returns_401():
     response = client.post("/api/scan/full")
     assert response.status_code == 401
+
+
+def test_job_start_and_cancel_are_audited():
+    headers = {"Authorization": f"Bearer {admin_token()}"}
+    job = client.post("/api/jobs/start", headers=headers, json={"job_type": JOB_TYPE_DUPLICATE_DETECTION}).json()
+    client.post(f"/api/jobs/{job['id']}/cancel", headers=headers)
+
+    logs = client.get("/api/admin/audit-logs?entity=JobHistory&limit=500", headers=headers).json()
+
+    actions = {log["action"] for log in logs if log["entity_id"] == job["id"]}
+    assert actions == {"START_JOB", "CANCEL_JOB"}

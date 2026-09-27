@@ -4,14 +4,14 @@ from sqlalchemy.orm import Session
 from app.core.auth import get_current_active_user, require_permission
 from app.db.session import get_db
 from app.schemas.library import LibraryCreate, LibraryRead, LibraryUpdate
-from app.services.audit_log import AuditLogService
+from app.services.audit import AuditService
 from app.services.library import LibraryService
 from app.utils.audit_actions import AuditAction
 from app.utils.enums import PermissionName
 
 router = APIRouter(prefix="/libraries", tags=["libraries"])
 service = LibraryService()
-audit_log_service = AuditLogService()
+audit_log_service = AuditService()
 
 
 @router.get(

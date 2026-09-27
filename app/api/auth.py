@@ -8,14 +8,14 @@ from app.repositories.refresh_token import RefreshTokenRepository
 from app.schemas.auth import LoginRequest, Token, RefreshRequest, LogoutRequest
 from app.schemas.user import UserRead
 from app.services.auth import AuthService
-from app.services.audit_log import AuditLogService
+from app.services.audit import AuditService
 from app.utils.audit_actions import AuditAction
 
 from fastapi.security import OAuth2PasswordRequestForm
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 auth_service = AuthService()
-audit_log_service = AuditLogService()
+audit_log_service = AuditService()
 refresh_repo = RefreshTokenRepository()
 
 @router.post(

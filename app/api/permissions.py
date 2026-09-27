@@ -5,10 +5,13 @@ from app.core.auth import require_permission
 from app.db.session import get_db
 from app.repositories.permission import PermissionRepository
 from app.schemas.permission import PermissionCreate, PermissionRead
+from app.services.audit import AuditService
+from app.utils.audit_actions import AuditAction
 from app.utils.enums import PermissionName
 
 router = APIRouter(prefix="/permissions", tags=["permissions"])
 permission_repo = PermissionRepository()
+audit_service = AuditService()
 
 
 @router.get(
@@ -43,7 +46,9 @@ def create_permission(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Permission already exists",
         )
-    return permission_repo.create(db, {"name": data.name, "description": data.description})
+    permission = permission_repo.create(db, {"name": data.name, "description": data.description})
+    audit_service.record(db, current_user, AuditAction.CREATE_PERMISSION, "Permission", permission.id, f"Created permission {permission.name}")
+    return permission
 
 
 @router.get(
