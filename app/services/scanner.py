@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Iterable
+from typing import Callable
 from datetime import datetime, UTC, timezone
 import hashlib
 import time
@@ -8,7 +8,6 @@ import time
 from app.core.config import settings
 from app.models.archive_entry import ArchiveEntry
 from app.repositories.archive_entry import ArchiveEntryRepository
-from app.services.matching import MatchingService
 from app.utils.enums import MetadataStatus, VerificationStatus
 from app.utils.normalization import parse_archive_name
 from sqlalchemy.orm import Session
@@ -23,6 +22,10 @@ logger = get_logger(__name__)
 
 SUPPORTED_ARCHIVE_EXTENSIONS = {".zip", ".rar", ".7z", ".iso", ".exe"}
 SUPPORTED_FOLDER_TYPE = "folder"
+# Called with (processed, total) after each discovered item.
+ProgressCallback = Callable[[int, int], None]
+# OS-generated files that do not make an organizing folder a game folder.
+IGNORED_FILE_NAMES = {"desktop.ini", "thumbs.db"}
 
 
 @dataclass
@@ -44,7 +47,6 @@ class ScannerService:
     def __init__(self) -> None:
         self.repo = ArchiveEntryRepository()
         self.library_repo = LibraryRepository()
-        self.matcher = MatchingService()
 
     def _compute_file_hash(self, path: Path) -> str | None:
         # Folder entries have no single file to hash.
@@ -116,175 +118,74 @@ class ScannerService:
                 stats["corrupted"] += 1
         return stats
 
-    def scan_full(self, db: Session, scan_root: str | None = None, job_id: str | None = None,) -> dict[str, int]:
+    def scan_full(self, db: Session, scan_root: str | None = None, job_id: str | None = None, on_progress: ProgressCallback | None = None,) -> dict:
         library_scans_total.inc()
-        logger.info(
-            "Full scan started",
-            extra={
-                "job_id": job_id,
-                "scan_root": scan_root,
-            },
-        )
-        if scan_root:
-            stats = self._process_items(
-                db,
-                self._discover_items(Path(scan_root)),
-                job_id=job_id,
-            )
-            logger.info(
-                "Full scan completed",
-                extra={
-                    "job_id": job_id,
-                    "archives_created": stats["created"],
-                    "archives_matched": stats["matched"],
-                    "archives_partial": stats["partial"],
-                    "archives_unmatched": stats["unmatched"],
-                }
-            )
-            return stats
-        libraries = self.library_repo.list_active(db)
-        stats = {
-            "created": 0,
-            "matched": 0,
-            "partial": 0,
-            "unmatched": 0,
-            "cancelled": False,
-        }
-        for library in libraries:
-            if self._job_cancelled(db, job_id,):
-                stats["cancelled"] = True
-                return stats
-            if not library.enabled:
-                continue
-            logger.info(
-                "Library scan started",
-                extra={
-                    "library_id": library.id,
-                    "library_name": library.name,
-                    "path": library.path,
-                    "job_id": job_id,
-                },
-            )
+        return self._scan(db, "Full scan", scan_root, job_id, on_progress, incremental=False)
 
-            library_stats = self._process_items(
-                db,
-                self._discover_items(Path(library.path)),
-                library_id=library.id,
-                job_id=job_id,
-            )
-
-            if library_stats.get("cancelled"):
-                stats["cancelled"] = True
-                return stats
-            
-            for key in (
-                "created",
-                "matched",
-                "partial",
-                "unmatched",
-            ):
-                stats[key] += library_stats[key]
-        logger.info(
-            "Full scan completed",
-            extra={
-                "job_id": job_id,
-                "archives_created": stats["created"],
-                "archives_matched": stats["matched"],
-                "archives_partial": stats["partial"],
-                "archives_unmatched": stats["unmatched"],
-            }
-        )
-        return stats
-
-    def scan_incremental(self, db: Session, scan_root: str | None = None, job_id: str | None = None,) -> dict[str, int]:
+    def scan_incremental(self, db: Session, scan_root: str | None = None, job_id: str | None = None, on_progress: ProgressCallback | None = None,) -> dict:
         incremental_scans_total.inc()
+        return self._scan(db, "Incremental scan", scan_root, job_id, on_progress, incremental=True)
+
+    def _scan(self, db: Session, label: str, scan_root: str | None, job_id: str | None, on_progress: ProgressCallback | None, incremental: bool,) -> dict:
         logger.info(
-            "Incremental scan started",
+            f"{label} started",
             extra={
                 "job_id": job_id,
                 "scan_root": scan_root,
             },
         )
-        existing_entries = {
-            entry.file_path: entry
-            for entry in self.repo.list_all(db)
-        }
         if scan_root:
-            items = [
-                item
-                for item in self._discover_items(Path(scan_root))
-                if self._needs_processing(
-                    item,
-                    existing_entries,
-                )
+            targets = [(None, Path(scan_root))]
+        else:
+            targets = [
+                (library.id, Path(library.path))
+                for library in self.library_repo.list_active(db)
+                if library.enabled
             ]
-            stats = self._process_items(
-                db,
-                items,
-                job_id=job_id,
-            )
-            logger.info(
-                "Incremental scan completed",
-                extra={
-                    "job_id": job_id,
-                    "archives_created": stats["created"],
-                    "archives_matched": stats["matched"],
-                    "archives_partial": stats["partial"],
-                    "archives_unmatched": stats["unmatched"],
-                }
-            )
-            return stats
-        libraries = self.library_repo.list_active(db)
+
+        # Discover everything up front so progress is reported against a known total.
+        batches = [(library_id, self._discover_items(path)) for library_id, path in targets]
+        if incremental:
+            existing_entries = {entry.file_path: entry for entry in self.repo.list_all(db)}
+            batches = [
+                (library_id, [item for item in items if self._needs_processing(item, existing_entries)])
+                for library_id, items in batches
+            ]
+
         stats = {
             "created": 0,
-            "matched": 0,
-            "partial": 0,
-            "unmatched": 0,
+            "updated": 0,
+            "moved": 0,
+            "errors": 0,
             "cancelled": False,
+            "created_ids": [],
         }
-        for library in libraries:
-            if self._job_cancelled(db, job_id,):
-                stats["cancelled"] = True
-                return stats
-            if not library.enabled:
-                continue
+        total = sum(len(items) for _, items in batches)
+        done = 0
+        for library_id, items in batches:
+            for item in items:
+                if self._job_cancelled(db, job_id):
+                    stats["cancelled"] = True
+                    logger.warning(
+                        "Scan cancelled",
+                        extra={
+                            "job_id": job_id,
+                        },
+                    )
+                    return stats
+                self._process_item(db, item, library_id, stats)
+                done += 1
+                if on_progress:
+                    on_progress(done, total)
 
-            items = [
-                item
-                for item in self._discover_items(
-                    Path(library.path)
-                )
-                if self._needs_processing(
-                    item,
-                    existing_entries,
-                )
-            ]
-            library_stats = self._process_items(
-                db,
-                items,
-                library_id=library.id,
-                job_id=job_id,
-            )
-            
-            if library_stats.get("cancelled"):
-                stats["cancelled"] = True
-                return stats
-            
-            for key in (
-                "created",
-                "matched",
-                "partial",
-                "unmatched",
-            ):
-                stats[key] += library_stats[key]
         logger.info(
-            "Incremental scan completed",
+            f"{label} completed",
             extra={
                 "job_id": job_id,
                 "archives_created": stats["created"],
-                "archives_matched": stats["matched"],
-                "archives_partial": stats["partial"],
-                "archives_unmatched": stats["unmatched"],
+                "archives_updated": stats["updated"],
+                "archives_moved": stats["moved"],
+                "archives_failed": stats["errors"],
             },
         )
         return stats
@@ -294,12 +195,36 @@ class ScannerService:
             return []
 
         items: list[ArchiveScanItem] = []
-        for path in base_path.rglob("*"):
+        try:
+            children = sorted(base_path.iterdir())
+        except OSError:
+            logger.warning("Directory not readable", extra={"path": str(base_path)})
+            return items
+        for path in children:
             if path.is_file() and path.suffix.lower() in SUPPORTED_ARCHIVE_EXTENSIONS:
                 items.append(self._scan_file(path))
             elif path.is_dir():
-                items.append(self._scan_folder(path))
+                try:
+                    is_game_folder = self._is_game_folder(path)
+                except OSError:
+                    logger.warning("Directory not readable", extra={"path": str(path)})
+                    continue
+                if is_game_folder:
+                    # The whole folder is one game; its subfolders are part of it.
+                    items.append(self._scan_folder(path))
+                else:
+                    items.extend(self._discover_items(path))
         return items
+
+    def _is_game_folder(self, path: Path) -> bool:
+        # A folder holding only archives and subfolders organizes the library; any other file means an unpacked game.
+        return any(
+            child.is_file()
+            and child.suffix.lower() not in SUPPORTED_ARCHIVE_EXTENSIONS
+            and not child.name.startswith(".")
+            and child.name.lower() not in IGNORED_FILE_NAMES
+            for child in path.iterdir()
+        )
 
     def _scan_file(self, path: Path) -> ArchiveScanItem:
         stat = path.stat()
@@ -341,111 +266,76 @@ class ScannerService:
             modified_time=None,
         )
 
-    def _process_items(self, db: Session, items: Iterable[ArchiveScanItem], library_id: str | None = None,job_id: str | None = None,) -> dict[str, int]:
-        stats = {"created": 0, "matched": 0, "partial": 0, "unmatched": 0}
-        for item in items:
-            if self._job_cancelled(db, job_id,):
-                stats["cancelled"] = True
-                logger.warning(
-                    "Scan cancelled",
-                    extra={
-                        "job_id": job_id,
-                    },
-                )
-                return stats
-            
-            existing_by_path = self.repo.get_by_file_path(
-                db,
-                item.file_path,
+    def _process_item(self, db: Session, item: ArchiveScanItem, library_id: str | None, stats: dict,) -> None:
+        try:
+            self._ingest(db, item, library_id, stats)
+        except Exception:
+            # One unreadable or vanished file must not abort the whole scan.
+            db.rollback()
+            stats["errors"] += 1
+            logger.exception(
+                "Scan item failed",
+                extra={
+                    "file_path": item.file_path,
+                },
             )
 
-            if existing_by_path:
-                if (
-                    existing_by_path.file_size is None
-                    or
-                    existing_by_path.modified_time is None
-                    or
-                    existing_by_path.file_hash is None
-                ):
-                    self._ensure_file_hash(item)
-                    self.repo.update(
-                        db,
-                        existing_by_path,
-                        {
-                            "file_size": item.file_size,
-                            "modified_time": item.modified_time,
-                            "file_hash": item.file_hash,
-                        },
-                    )
-
-                continue
-            
+    def _ingest(self, db: Session, item: ArchiveScanItem, library_id: str | None, stats: dict,) -> None:
+        existing = self.repo.get_by_file_path(db, item.file_path)
+        if existing:
+            changed = (
+                existing.file_size != item.file_size
+                or existing.modified_time != item.modified_time
+            )
+            missing_hash = existing.file_hash is None and item.archive_type != SUPPORTED_FOLDER_TYPE
+            if not (changed or missing_hash):
+                return
             self._ensure_file_hash(item)
-            existing_by_hash = None
-            if item.file_hash:
-                existing_by_hash = self.repo.get_by_hash(
-                    db,
-                    item.file_hash,
-                )
-            if existing_by_hash:
-                self.repo.update(
-                    db,
-                    existing_by_hash,
-                    {
-                        "file_path": item.file_path,
-                        "file_size": item.file_size,
-                        "modified_time": item.modified_time,
-                    },
-                )
-                continue
-
-            existing = self.repo.get_by_title_and_version(
-            db,
-            item.title,
-            item.version,
-            )
-
-            if existing:
-                stats["matched"] += 1
-                continue
-
-            match_type, confidence = self.matcher.match_title(db, item.title, item.version,)
-            metadata_status = self.matcher.metadata_status_for_match(match_type)
-            archive_entry = self.repo.create(db, {
-                "title": item.title,
-                "description": None,
-                "version": item.version,
-                "engine": None,
-                "release_date": None,
-                "archive_type": item.archive_type,
-                "file_path": item.file_path,
-                "storage_device": None,
-                "cover_path": None,
-                "banner_path": None,
-                "logo_path": None,
-                "metadata_status": metadata_status,
-                "metadata_source": None,
-                "metadata_source_code": None,
-                "last_metadata_refresh": None,
-                "last_verified": None,
-                "verification_status": VerificationStatus.UNKNOWN,
-                "parent_series_id": None,
-                "franchise_id": None,
-                "library_id": library_id,
+            update = {
                 "file_size": item.file_size,
                 "modified_time": item.modified_time,
                 "file_hash": item.file_hash,
-            })
-            stats["created"] += 1
-            if metadata_status == MetadataStatus.MATCHED:
-                stats["matched"] += 1
-            elif metadata_status == MetadataStatus.PARTIAL:
-                stats["partial"] += 1
-            else:
-                stats["unmatched"] += 1
+            }
+            if changed:
+                update["verification_status"] = VerificationStatus.UNKNOWN
+            self.repo.update(db, existing, update)
+            stats["updated"] += 1
+            return
 
-        return stats
-    
+        self._ensure_file_hash(item)
+        if item.file_hash:
+            for candidate in self.repo.get_all_by_hash(db, item.file_hash):
+                # Same content at a new path while the old path is gone means the archive was moved;
+                # if the old file still exists this is a second copy and gets its own entry.
+                if not Path(candidate.file_path).exists():
+                    self.repo.update(
+                        db,
+                        candidate,
+                        {
+                            "file_path": item.file_path,
+                            "file_size": item.file_size,
+                            "modified_time": item.modified_time,
+                            "library_id": library_id or candidate.library_id,
+                        },
+                    )
+                    stats["moved"] += 1
+                    return
+
+        archive_entry = self.repo.create(db, {
+            "title": item.title,
+            "version": item.version,
+            "archive_type": item.archive_type,
+            "file_path": item.file_path,
+            "metadata_status": MetadataStatus.UNMATCHED,
+            "verification_status": VerificationStatus.UNKNOWN,
+            "library_id": library_id,
+            "file_size": item.file_size,
+            "modified_time": item.modified_time,
+            "file_hash": item.file_hash,
+        })
+        stats["created"] += 1
+        stats["created_ids"].append(archive_entry.id)
+
     def _ensure_file_hash(self, item: ArchiveScanItem,) -> None:
         if item.file_hash is None:
             item.file_hash = self._compute_file_hash(

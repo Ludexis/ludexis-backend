@@ -65,12 +65,89 @@ def test_incremental_scan_detects_new_file(tmp_path):
 
 def test_scan_library_with_subdirectory(tmp_path):
     db = TestingSessionLocal()
-    game_dir = tmp_path / f"Game {uuid.uuid4().hex}"
-    game_dir.mkdir()
-    (game_dir / f"{uuid.uuid4()}.zip").write_bytes(uuid.uuid4().hex.encode())
+    # Organizing folder: only archives and subfolders, so its archives are scanned.
+    category = tmp_path / f"RPG {uuid.uuid4().hex}"
+    category.mkdir()
+    (category / f"{uuid.uuid4()}.zip").write_bytes(uuid.uuid4().hex.encode())
+    (category / "desktop.ini").write_text("")
+    # Unpacked game folder: one entry, its subfolders and executables are not entries.
+    game_dir = category / f"Game {uuid.uuid4().hex}"
+    (game_dir / "bin").mkdir(parents=True)
+    (game_dir / "data" / "maps").mkdir(parents=True)
+    (game_dir / "readme.txt").write_text("game")
+    (game_dir / "bin" / "game.exe").write_bytes(uuid.uuid4().hex.encode())
+    (game_dir / "bin" / "engine.dll").write_bytes(b"dll")
     result = ScannerService().scan_full(
         db,
         scan_root=str(tmp_path),
     )
     assert result["created"] == 2
+    db.close()
+
+
+def test_rescan_updates_changed_archive(tmp_path):
+    db = TestingSessionLocal()
+    archive = tmp_path / f"{uuid.uuid4()}.zip"
+    archive.write_bytes(b"first")
+    scanner = ScannerService()
+    scanner.scan_full(db, scan_root=str(tmp_path))
+    archive.write_bytes(b"second, longer content")
+
+    result = scanner.scan_incremental(db, scan_root=str(tmp_path))
+
+    entry = scanner.repo.get_by_file_path(db, str(archive.resolve()))
+    assert result["updated"] == 1
+    assert entry.file_size == len(b"second, longer content")
+    db.close()
+
+
+def test_moved_archive_keeps_its_entry(tmp_path):
+    db = TestingSessionLocal()
+    content = uuid.uuid4().hex.encode()
+    old_dir, new_dir = tmp_path / "old", tmp_path / "new"
+    old_dir.mkdir()
+    new_dir.mkdir()
+    (old_dir / "Moved_Game.zip").write_bytes(content)
+    scanner = ScannerService()
+    scanner.scan_full(db, scan_root=str(old_dir))
+    (old_dir / "Moved_Game.zip").rename(new_dir / "Moved_Game.zip")
+
+    result = scanner.scan_full(db, scan_root=str(new_dir))
+
+    assert result == {**result, "created": 0, "moved": 1}
+    db.close()
+
+
+def test_copy_of_existing_archive_gets_its_own_entry(tmp_path):
+    db = TestingSessionLocal()
+    content = uuid.uuid4().hex.encode()
+    (tmp_path / "Copy_A.zip").write_bytes(content)
+    (tmp_path / "Copy_B.zip").write_bytes(content)
+
+    result = ScannerService().scan_full(db, scan_root=str(tmp_path))
+
+    assert result["created"] == 2
+    db.close()
+
+
+def test_failing_file_does_not_abort_scan(tmp_path, monkeypatch):
+    db = TestingSessionLocal()
+    for name in ("Good_One.zip", "Broken.zip", "Good_Two.zip"):
+        (tmp_path / f"{uuid.uuid4().hex}_{name}").write_bytes(uuid.uuid4().hex.encode())
+    scanner = ScannerService()
+    original_hash = scanner._compute_file_hash
+
+    def flaky_hash(path):
+        if "Broken" in path.name:
+            raise OSError("unreadable")
+        return original_hash(path)
+
+    monkeypatch.setattr(scanner, "_compute_file_hash", flaky_hash)
+    progress = []
+
+    result = scanner.scan_full(db, scan_root=str(tmp_path), on_progress=lambda done, total: progress.append((done, total)))
+
+    assert result["created"] == 2
+    assert result["errors"] == 1
+    assert progress[-1] == (3, 3)
     db.close()
