@@ -217,3 +217,29 @@ def test_unauthenticated_create_archive_entry():
         },
     )
     assert response.status_code == 401
+
+
+def test_patch_archive_entry_keeps_omitted_fields():
+    token = admin_token()
+    tag = client.post("/api/tags/", headers=_auth(token), json={"name": f"Tag {_unique()}"})
+    assert tag.status_code == 201, tag.text
+    title = f"Partial Patch {_unique()}"
+    file_path = f"C:/archives/partial-{_unique()}.iso"
+    created = client.post(
+        "/api/archive-entries/",
+        headers=_auth(token),
+        json={"title": title, "file_path": file_path, "tag_ids": [tag.json()["id"]]},
+    )
+    assert created.status_code == 201, created.text
+
+    response = client.patch(
+        f"/api/archive-entries/{created.json()['id']}",
+        headers=_auth(token),
+        json={"description": "Only this changes"},
+    )
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["description"] == "Only this changes"
+    assert body["title"] == title
+    assert body["file_path"] == file_path
+    assert body["tag_ids"] == [tag.json()["id"]]

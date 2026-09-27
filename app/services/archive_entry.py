@@ -32,7 +32,7 @@ class ArchiveEntryService:
         return entry
 
     def update(self, db: Session, entry: ArchiveEntry, data: ArchiveEntryUpdate) -> ArchiveEntry:
-        update_data = data.model_dump(exclude={"tag_ids", "developer_ids", "publisher_ids", "collection_ids", "related_entry_ids"}, exclude_none=False)
+        update_data = data.model_dump(exclude={"tag_ids", "developer_ids", "publisher_ids", "collection_ids", "related_entry_ids"}, exclude_unset=True)
         entry = self.repo.update(db, entry, update_data)
         self._assign_relations(db, entry, data)
         return entry
@@ -59,15 +59,15 @@ class ArchiveEntryService:
         return archive
 
     def _assign_relations(self, db: Session, entry: ArchiveEntry, data: ArchiveEntryCreate | ArchiveEntryUpdate) -> None:
-        if hasattr(data, "tag_ids"):
+        if "tag_ids" in data.model_fields_set:
             entry.tags = self._resolve_list(db, data.tag_ids, self.tag_repo, "Tag")
-        if hasattr(data, "developer_ids"):
+        if "developer_ids" in data.model_fields_set:
             entry.developers = self._resolve_list(db, data.developer_ids, self.developer_repo, "Developer")
-        if hasattr(data, "publisher_ids"):
+        if "publisher_ids" in data.model_fields_set:
             entry.publishers = self._resolve_list(db, data.publisher_ids, self.publisher_repo, "Publisher")
-        if hasattr(data, "collection_ids"):
+        if "collection_ids" in data.model_fields_set:
             entry.collections = self._resolve_list(db, data.collection_ids, self.collection_repo, "Collection")
-        if hasattr(data, "related_entry_ids"):
+        if "related_entry_ids" in data.model_fields_set:
             entry.related_entries = self._resolve_list(db, data.related_entry_ids, self.repo, "ArchiveEntry")
         if hasattr(data, "franchise_id") and data.franchise_id is not None:
             franchise = self.franchise_repo.get(db, data.franchise_id)
