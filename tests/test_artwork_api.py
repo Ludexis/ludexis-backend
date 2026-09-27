@@ -164,3 +164,18 @@ def test_unauthenticated_upload_returns_401():
         data={"archive_entry_id": entry_id, "artwork_type": "cover"},
     )
     assert response.status_code == 401, response.text
+
+
+def test_media_accepts_access_token_query_parameter():
+    from main import media_dir
+
+    name = f"media-test-{uuid.uuid4().hex}.png"
+    (media_dir / name).write_bytes(PNG_BYTES)
+    try:
+        assert client.get(f"/media/{name}").status_code == 401
+        assert client.get(f"/media/{name}?access_token=invalid").status_code == 401
+        response = client.get(f"/media/{name}?access_token={admin_token()}")
+        assert response.status_code == 200
+        assert response.content == PNG_BYTES
+    finally:
+        (media_dir / name).unlink()

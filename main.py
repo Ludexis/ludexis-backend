@@ -2,12 +2,13 @@ from fastapi import APIRouter, Depends, FastAPI, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from prometheus_fastapi_instrumentator import Instrumentator
+from sqlalchemy.orm import Session
 
 from app.api import api_router
-from app.core.auth import get_current_active_user
+from app.core.auth import get_current_active_user, get_current_user, oauth2_scheme_optional
 from app.core.config import settings
 from app.core.logging import setup_logging
-from app.db.session import engine
+from app.db.session import engine, get_db
 from app.services.storage import StorageService
 
 setup_logging()
@@ -35,8 +36,20 @@ media_dir.mkdir(parents=True, exist_ok=True)
 media_router = APIRouter()
 
 
+def get_media_user(
+    token: str | None = Depends(oauth2_scheme_optional),
+    access_token: str | None = None,
+    db: Session = Depends(get_db),
+):
+    # <img> tags cannot send an Authorization header, so media also accepts the access token as a query parameter.
+    token = token or access_token
+    if not token:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Not authenticated")
+    return get_current_active_user(get_current_user(token, db))
+
+
 @media_router.get("/media/{path:path}")
-def read_media(path: str, current_user=Depends(get_current_active_user)):
+def read_media(path: str, current_user=Depends(get_media_user)):
     requested_path = (media_dir / path).resolve()
     if requested_path != media_dir and media_dir not in requested_path.parents:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
