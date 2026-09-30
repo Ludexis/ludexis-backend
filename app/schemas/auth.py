@@ -7,6 +7,11 @@ class Token(BaseModel):
     token_type: str = "bearer"
 
 
+class MediaToken(BaseModel):
+    media_token: str
+    expires_in: int
+
+
 class TokenPayload(BaseModel):
     sub: str
     type: str

@@ -166,16 +166,25 @@ def test_unauthenticated_upload_returns_401():
     assert response.status_code == 401, response.text
 
 
-def test_media_accepts_access_token_query_parameter():
+def test_media_accepts_only_media_tokens_in_the_url():
     from main import media_dir
 
     name = f"media-test-{uuid.uuid4().hex}.png"
     (media_dir / name).write_bytes(PNG_BYTES)
     try:
+        access_token = admin_token()
         assert client.get(f"/media/{name}").status_code == 401
-        assert client.get(f"/media/{name}?access_token=invalid").status_code == 401
-        response = client.get(f"/media/{name}?access_token={admin_token()}")
+        assert client.get(f"/media/{name}?media_token=invalid").status_code == 401
+        # A full access token must not work as a URL parameter.
+        assert client.get(f"/media/{name}?media_token={access_token}").status_code == 401
+
+        issued = client.get("/api/auth/media-token", headers={"Authorization": f"Bearer {access_token}"})
+        assert issued.status_code == 200
+        media_token = issued.json()["media_token"]
+        response = client.get(f"/media/{name}?media_token={media_token}")
         assert response.status_code == 200
         assert response.content == PNG_BYTES
+        # The media token is not accepted by the API.
+        assert client.get("/api/auth/me", headers={"Authorization": f"Bearer {media_token}"}).status_code == 401
     finally:
         (media_dir / name).unlink()

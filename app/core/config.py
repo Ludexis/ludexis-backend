@@ -41,6 +41,7 @@ class Settings(BaseSettings):
     JWT_ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 15
     REFRESH_TOKEN_EXPIRE_DAYS: int = 30
+    MEDIA_TOKEN_EXPIRE_MINUTES: int = 60
     JOB_MAX_RETRIES: int = 5
     JOB_RETRY_BACKOFF_MAX: int = 300
 

@@ -5,7 +5,9 @@ from sqlalchemy.orm import Session
 from app.core.auth import get_current_user
 from app.db.session import get_db
 from app.repositories.refresh_token import RefreshTokenRepository
-from app.schemas.auth import LoginRequest, Token, RefreshRequest, LogoutRequest
+from app.core.config import settings
+from app.core.security import create_media_token
+from app.schemas.auth import LoginRequest, MediaToken, Token, RefreshRequest, LogoutRequest
 from app.schemas.user import UserRead
 from app.services.auth import AuthService
 from app.services.audit import AuditService
@@ -119,6 +121,19 @@ def logout(data: LogoutRequest, db: Session = Depends(get_db)):
 )
 def read_current_user(current_user: UserRead = Depends(get_current_user)):
     return current_user
+
+@router.get(
+    "/media-token",
+    response_model=MediaToken,
+    summary="Issue a media token",
+    description="Return a short-lived token that only authorizes GET /media requests, for use in image URLs.",
+    response_description="Media token issued.",
+)
+def issue_media_token(current_user: UserRead = Depends(get_current_user)):
+    return MediaToken(
+        media_token=create_media_token(current_user.id),
+        expires_in=settings.MEDIA_TOKEN_EXPIRE_MINUTES * 60,
+    )
 
 @router.post(
     "/token",

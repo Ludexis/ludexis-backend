@@ -5,7 +5,11 @@ from prometheus_fastapi_instrumentator import Instrumentator
 from sqlalchemy.orm import Session
 
 from app.api import api_router
+from jose import JWTError
+
 from app.core.auth import get_current_active_user, get_current_user, oauth2_scheme_optional
+from app.core.security import verify_token
+from app.repositories.user import UserRepository
 from app.core.config import settings
 from app.core.logging import setup_logging
 from app.db.session import engine, get_db
@@ -38,14 +42,21 @@ media_router = APIRouter()
 
 def get_media_user(
     token: str | None = Depends(oauth2_scheme_optional),
-    access_token: str | None = None,
+    media_token: str | None = None,
     db: Session = Depends(get_db),
 ):
-    # <img> tags cannot send an Authorization header, so media also accepts the access token as a query parameter.
-    token = token or access_token
-    if not token:
+    if token:
+        return get_current_active_user(get_current_user(token, db))
+    # <img> tags cannot send an Authorization header, so they pass a media-only token (GET /api/auth/media-token).
+    if not media_token:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Not authenticated")
-    return get_current_active_user(get_current_user(token, db))
+    try:
+        user = UserRepository().get(db, verify_token(media_token, token_type="media"))
+    except JWTError as exc:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid media token") from exc
+    if user is None or not user.is_active:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Inactive user")
+    return user
 
 
 @media_router.get("/media/{path:path}")
