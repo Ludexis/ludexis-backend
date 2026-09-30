@@ -1,4 +1,4 @@
-from typing import Iterable
+import re
 from difflib import SequenceMatcher
 from datetime import UTC, datetime
 from sqlalchemy.orm import Session
@@ -12,8 +12,6 @@ from app.services.metadata_conflict import MetadataConflictResolver
 from app.models.genre import Genre
 from app.models.developer import Developer
 from app.models.publisher import Publisher
-from app.models.job_history import JobHistory
-from app.utils.enums import JobStatus
 
 from app.repositories.genre import GenreRepository
 from app.repositories.developer import DeveloperRepository
@@ -23,6 +21,24 @@ from app.core.logging import get_logger
 from app.core.metrics import metadata_searches_total
 
 logger = get_logger(__name__)
+
+MATCHED_THRESHOLD = 0.85
+PARTIAL_THRESHOLD = 0.70
+
+
+def title_similarity(left: str, right: str) -> float:
+    left_words = re.findall(r"[a-z0-9]+", left.lower())
+    right_words = re.findall(r"[a-z0-9]+", right.lower())
+    left_joined, right_joined = "".join(left_words), "".join(right_words)
+    # Archive names often lose spaces and punctuation, so identical letters and digits are a full match.
+    if left_joined == right_joined:
+        return 1.0 if left_joined else 0.0
+    # Otherwise average character similarity with shared whole words, so a short title like
+    # "Red Moon" does not match "Bred Moon" on characters alone.
+    characters = SequenceMatcher(None, left_joined, right_joined).ratio()
+    shared = set(left_words) & set(right_words)
+    words = len(shared) / len(set(left_words) | set(right_words))
+    return (characters + words) / 2
 
 class MetadataService:
     def __init__(self, providers: list[MetadataProvider] | None = None) -> None:
@@ -95,48 +111,30 @@ class MetadataService:
             )
 
     def auto_match(self, title: str, ) -> tuple[MetadataSearchResult | None, float]:
-        logger.info(
-            "Metadata auto-match started",
-            extra={
-                "title": title,
-            },
-        )
-        results = self.search(
-            title,
-            preferred_providers=["IGDB"],
-            limit=20,
-        )
-        if not results:
-            logger.info(
-                "Metadata auto-match returned no results",
-                extra={
-                    "title": title,
-                },
-            )
-            return None, 0.0
+        # Providers are tried in priority order (IGDB first); a confident match stops the search,
+        # otherwise the best candidate across all providers wins.
         best_result = None
         best_score = 0.0
-        for result in results:
-            score = SequenceMatcher(
-                None,
-                title.lower(),
-                result.title.lower(),
-            ).ratio()
-            result.score = score
-            if score > best_score:
-                best_score = score
-                best_result = result
+        for provider in self._get_providers(["IGDB"]):
+            for result in self._search_provider(provider, title, limit=20):
+                score = title_similarity(title, result.title)
+                result.score = score
+                if score > best_score:
+                    best_score = score
+                    best_result = result
+            if best_score >= MATCHED_THRESHOLD:
+                break
         logger.info(
             "Metadata auto-match completed",
             extra={
                 "title": title,
-                "provider": best_result.provider,
-                "provider_id": best_result.provider_id,
+                "provider": best_result.provider if best_result else None,
+                "provider_id": best_result.provider_id if best_result else None,
                 "score": round(best_score, 3),
             },
         )
         return best_result, best_score
-    
+
     def auto_match_archive(self, db: Session, archive: ArchiveEntry, ) -> bool:
         logger.info(
             "Archive metadata matching started",
@@ -157,14 +155,11 @@ class MetadataService:
         match, score = self.auto_match(
             archive.title,
         )
-        if match is None:
-            archive.metadata_status = (
-                MetadataStatus.UNMATCHED
-            )
-            archive.metadata_confidence = 0.0
-            archive.last_metadata_refresh = (
-                datetime.now(UTC)
-            )
+        archive.last_metadata_refresh = datetime.now(UTC)
+        archive.metadata_confidence = round(score, 3)
+        if match is None or score < PARTIAL_THRESHOLD:
+            # A weak candidate is not recorded as the source, so refreshes never enrich from the wrong game.
+            archive.metadata_status = MetadataStatus.UNMATCHED
             db.add(archive)
             db.commit()
             logger.info(
@@ -172,50 +167,17 @@ class MetadataService:
                 extra={
                     "archive_id": archive.id,
                     "title": archive.title,
+                    "score": round(score, 3),
                 },
             )
             return False
-        if score >= 0.85:
-            archive.metadata_status = (
-                MetadataStatus.MATCHED
-            )
-        elif score >= 0.70:
-            archive.metadata_status = (
-                MetadataStatus.PARTIAL
-            )
-        else:
-            archive.metadata_status = (
-                MetadataStatus.UNMATCHED
-            )
-        archive.metadata_source = (
-            match.provider
+        archive.metadata_status = (
+            MetadataStatus.MATCHED
+            if score >= MATCHED_THRESHOLD
+            else MetadataStatus.PARTIAL
         )
-        archive.metadata_source_code = (
-            match.provider_id
-        )
-        if archive.metadata_status != MetadataStatus.UNMATCHED:
-            archive.metadata_confidence = round(
-                score,
-                3,
-            )
-            details = self.get_details(
-                match.provider,
-                match.provider_id,
-            )
-            if details:
-
-                if details.description:
-                    archive.description = (
-                        details.description
-                    )
-
-                if details.release_date:
-                    archive.release_date = (
-                        details.release_date
-                    )
-        archive.last_metadata_refresh = (
-            datetime.now(UTC)
-        )
+        archive.metadata_source = match.provider
+        archive.metadata_source_code = match.provider_id
         db.add(archive)
         db.commit()
         logger.info(
@@ -227,6 +189,7 @@ class MetadataService:
                 "status": archive.metadata_status.value,
             },
         )
+        self.refresh_archive(db, archive)
         return (archive.metadata_status!= MetadataStatus.UNMATCHED)
 
     def search(self, query: str, preferred_providers: list[str] | None = None, limit: int = 20) -> list[MetadataSearchResult]:
@@ -239,31 +202,9 @@ class MetadataService:
                 "limit": limit,
             },
         )
-        providers = self._get_providers(preferred_providers)
         results: list[MetadataSearchResult] = []
-
-        for provider in providers:
-            try:
-                provider_results = provider.search(query, limit=limit)
-                logger.info(
-                    "Metadata provider search completed",
-                    extra={
-                        "provider": provider.name,
-                        "query": query,
-                        "result_count": len(provider_results),
-                    },
-                )
-            except NotImplementedError:
-                continue
-            except Exception:
-                logger.exception(
-                    "Metadata provider search failed",
-                    extra={
-                        "provider": provider.name,
-                        "query": query,
-                    },
-                )
-                continue
+        for provider in self._get_providers(preferred_providers):
+            provider_results = self._search_provider(provider, query, limit)
             if provider_results:
                 results.extend(provider_results)
                 break
@@ -275,6 +216,30 @@ class MetadataService:
             },
         )
         return results
+
+    def _search_provider(self, provider: MetadataProvider, query: str, limit: int) -> list[MetadataSearchResult]:
+        try:
+            provider_results = provider.search(query, limit=limit)
+        except NotImplementedError:
+            return []
+        except Exception:
+            logger.exception(
+                "Metadata provider search failed",
+                extra={
+                    "provider": provider.name,
+                    "query": query,
+                },
+            )
+            return []
+        logger.info(
+            "Metadata provider search completed",
+            extra={
+                "provider": provider.name,
+                "query": query,
+                "result_count": len(provider_results),
+            },
+        )
+        return provider_results
 
     def get_details(self, provider_name: str | None, provider_id: str) -> MetadataDetails | None:
         if provider_name:
@@ -330,7 +295,9 @@ class MetadataService:
             return False
 
         details = self.get_merged_details(
-            archive.title
+            archive.title,
+            archive.metadata_source,
+            archive.metadata_source_code,
         )
         if not details:
             return False
@@ -369,102 +336,50 @@ class MetadataService:
         )
         return True
     
-    def refresh_all(self, db: Session, job_id: str | None = None,) -> dict:
-        logger.info(
-            "Metadata batch refresh started",
-            extra={
-                "job_id": job_id,
-            },
+    def enrich_archive(self, db: Session, archive: ArchiveEntry,) -> bool:
+        # Entries without a provider match are matched first; matched entries are refreshed from their stored source.
+        if archive.metadata_override:
+            return False
+        if archive.metadata_source and archive.metadata_source_code:
+            return self.refresh_archive(db, archive)
+        return self.auto_match_archive(db, archive)
+
+    def enrichment_candidates(self, db: Session, entry_ids: list[str] | None = None,) -> list[ArchiveEntry]:
+        query = db.query(ArchiveEntry).filter(
+            ArchiveEntry.deleted_at.is_(None),
+            ArchiveEntry.metadata_override.is_(False),
         )
-        archives = (
-            db.query(ArchiveEntry)
-            .filter(
-                ArchiveEntry.metadata_status
-                == MetadataStatus.MATCHED
-            )
-            .all()
-        )
-        refreshed = 0
-        failed = 0
-        for archive in archives:
-            if job_id:
-                job = (db.query(JobHistory).filter(JobHistory.id== job_id).first())
-                if (job and job.status==JobStatus.CANCELED):
-                    logger.warning(
-                        "Metadata batch refresh cancelled",
-                        extra={
-                            "job_id": job_id,
-                        },
-                    )
-                    return {
-                        "refreshed": refreshed,
-                        "failed": failed,
-                        "cancelled": True,
-                    }
-            if archive.metadata_override:
-                logger.info(
-                    "Metadata refresh skipped",
-                    extra={
-                        "archive_id": archive.id,
-                        "reason": "metadata_override",
-                    },
-                )
-                continue
-            if self.refresh_archive(
-                db,
-                archive,
-            ):
-                refreshed += 1
-            else:
-                failed += 1
-        logger.info(
-            "Metadata batch refresh completed",
-            extra={
-                "job_id": job_id,
-                "refreshed": refreshed,
-                "failed": failed,
-            },
-        )
-        return {
-            "refreshed": refreshed,
-            "failed": failed,
-        }
-    
+        if entry_ids is not None:
+            return query.filter(ArchiveEntry.id.in_(entry_ids)).all()
+        # Matched entries are refreshed; entries never attempted are matched. Entries that failed to match
+        # are left for manual review instead of being searched again every night.
+        return query.filter(
+            (ArchiveEntry.metadata_source_code.is_not(None))
+            | (ArchiveEntry.last_metadata_refresh.is_(None))
+        ).all()
+
     def get_merged_details(
         self,
         title: str,
+        provider_name: str | None = None,
+        provider_id: str | None = None,
     ) -> MetadataDetails | None:
+        if provider_id is None:
+            match, score = self.auto_match(title)
+            if match is None or score < PARTIAL_THRESHOLD:
+                return None
+            provider_name, provider_id = match.provider, match.provider_id
 
-        match, score = self.auto_match(
-            title
-        )
-
-        if match is None:
+        primary = self.get_details(provider_name, provider_id)
+        if primary is None:
             return None
 
-        igdb_details = self.get_details(
-            match.provider,
-            match.provider_id,
-        )
-
-        if igdb_details is None:
-            return None
-
-        steam_results = SteamProvider().search(
-            title,
-            limit=1,
-        )
-
+        steam = self._get_provider("Steam")
         steam_details = None
+        if steam is not None and provider_name != steam.name:
+            steam_results = steam.search(title, limit=1)
+            # Only merge a Steam record that is clearly the same game.
+            if steam_results and title_similarity(title, steam_results[0].title) >= MATCHED_THRESHOLD:
+                steam_details = steam.get_details(steam_results[0].provider_id)
 
-        if steam_results:
-            steam_details = (
-                SteamProvider().get_details(
-                    steam_results[0].provider_id
-                )
-            )
-
-        return self.conflict_resolver.resolve(
-            igdb_details,
-            steam_details,
-        )
+        return self.conflict_resolver.resolve(primary, steam_details)
