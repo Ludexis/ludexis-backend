@@ -1,80 +1,31 @@
-from datetime import datetime, UTC
-
 from app.db.session import SessionLocal
-from app.repositories.job_history import JobHistoryRepository
 from app.services.artwork import ArtworkService
 from app.tasks.celery_app import celery_app
-from app.utils.enums import JobStatus, JobType
-from app.models.job_history import JobHistory
-from app.core.config import settings
+from app.tasks.job_runner import JOB_TASK_OPTIONS, run_job
+from app.utils.enums import JobType
 
 
-@celery_app.task(
-    bind=True,
-    autoretry_for=(Exception,),
-    retry_backoff=True,
-    retry_backoff_max=settings.JOB_RETRY_BACKOFF_MAX,
-    retry_kwargs={
-        "max_retries": settings.JOB_MAX_RETRIES,
-    },
-)
+@celery_app.task(**JOB_TASK_OPTIONS)
 def validate_artwork_task(self, job_history_id: str) -> str:
-    db = SessionLocal()
-    job_repo = JobHistoryRepository()
-    job = job_repo.get(db, job_history_id)
-    if job is None:
-        db.close()
-        return "job not found"
-    try:
-        job.status = JobStatus.RUNNING
-        job.details = "Artwork validation started"
-        db.add(job)
-        db.commit()
+    # Validates every entry's artwork and re-downloads missing or corrupt assets for provider-matched entries.
+    return run_job(
+        self,
+        job_history_id,
+        "Artwork refresh",
+        lambda db, report, job_id: ArtworkService().validate_and_redownload_artwork(db),
+    )
 
-        artwork_service = ArtworkService()
-        results = artwork_service.validate_all_artwork(db)
-
-        job.status = JobStatus.SUCCESS
-        job.progress = 100
-        job.result = f"Artwork validation completed: {len(results)} entries checked"
-        job.details = job.result
-        job.completed_at = datetime.now(UTC)
-        db.add(job)
-        db.commit()
-        return job.result
-    except Exception as exc:
-        if job is not None:
-            job.status = JobStatus.FAILED
-            job.details = str(exc)
-            job.result = str(exc)
-            job.completed_at = datetime.now(UTC)
-            db.add(job)
-            db.commit()
-        raise
-    finally:
-        db.close()
 
 @celery_app.task
 def scheduled_artwork_validation_task() -> str:
+    from app.services.job import JobService
+
     db = SessionLocal()
     try:
-        job = JobHistory(
-            job_type=(JobType.ARTWORK_REFRESH),
-            status=(JobStatus.PENDING),
-            details=("Scheduled artwork validation"),
-        )
-
-        db.add(job)
-        db.commit()
-        db.refresh(job)
-
-        task = (validate_artwork_task.delay(job.id))
-        job.task_id = task.id
-
-        db.add(job)
-        db.commit()
-
-        return task.id
-
+        service = JobService()
+        active = service.active_job(db, JobType.ARTWORK_REFRESH)
+        if active:
+            return f"artwork refresh already active: {active.id}"
+        return service.start_job(db, None, JobType.ARTWORK_REFRESH, details="Scheduled artwork refresh").task_id
     finally:
         db.close()

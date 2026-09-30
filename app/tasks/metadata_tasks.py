@@ -1,106 +1,31 @@
-from datetime import datetime, UTC
-
 from app.db.session import SessionLocal
-from app.repositories.job_history import JobHistoryRepository
-from app.services.metadata import MetadataService
+from app.services.enrichment import EnrichmentService
 from app.tasks.celery_app import celery_app
-from app.utils.enums import JobStatus, JobType
-from app.models.job_history import JobHistory
-from app.core.config import settings
+from app.tasks.job_runner import JOB_TASK_OPTIONS, run_job
+from app.utils.enums import JobType
 
-@celery_app.task(
-    bind=True,
-    autoretry_for=(Exception,),
-    retry_backoff=True,
-    retry_backoff_max=settings.JOB_RETRY_BACKOFF_MAX,
-    retry_kwargs={
-        "max_retries": settings.JOB_MAX_RETRIES,
-    },
-)
-def refresh_metadata_task(self, job_history_id: str,) -> str:
-    db = SessionLocal()
-    job_repo = JobHistoryRepository()
 
-    try:
-        job = job_repo.get(db, job_history_id,)
-        if job is None:
-            return "job not found"
-
-        job.status = (JobStatus.RUNNING)
-        job.details = ("Metadata refresh started")
-
-        db.add(job)
-        db.commit()
-
-        metadata_service = (MetadataService())
-        stats = (metadata_service.refresh_all(db, job.id,))        
-        if stats.get("cancelled"):
-            job.status = (JobStatus.CANCELED)
-            job.result = ("Metadata refresh cancelled")
-        else:
-            job.status = (JobStatus.SUCCESS)
-            job.result = (f"Metadata refresh completed: {stats}")
-        job.progress = 100
-        job.details = (job.result)
-        job.completed_at = (datetime.now(UTC))
-
-        db.add(job)
-        db.commit()
-
-        return job.result
-
-    except Exception as exc:
-        if job is not None:
-            job.status = (JobStatus.FAILED)
-            job.details = str(exc)
-            job.result = str(exc)
-            job.completed_at = (datetime.now(UTC))
-
-            db.add(job)
-            db.commit()
-
-        raise
-
-    finally:
-        db.close()
+@celery_app.task(**JOB_TASK_OPTIONS)
+def refresh_metadata_task(self, job_history_id: str, entry_ids: list[str] | None = None) -> str:
+    # Without entry_ids: refresh matched entries and match entries never attempted.
+    return run_job(
+        self,
+        job_history_id,
+        "Metadata refresh",
+        lambda db, report, job_id: EnrichmentService().enrich(db, entry_ids, job_id, report),
+    )
 
 
 @celery_app.task
 def scheduled_metadata_refresh_task() -> str:
+    from app.services.job import JobService
+
     db = SessionLocal()
-    existing = (db.query(JobHistory).filter(
-            JobHistory.job_type == JobType.METADATA_REFRESH,
-            JobHistory.status.in_(
-                [
-                    JobStatus.PENDING,
-                    JobStatus.RUNNING,
-                ]
-            ),
-        )
-        .first()
-    )
-
-    if existing:
-        return (f"metadata refresh already active: "f"{existing.id}")
-
     try:
-        job = JobHistory(
-            job_type=(JobType.METADATA_REFRESH),
-            status=(JobStatus.PENDING),
-            details=("Scheduled metadata refresh"),
-        )
-
-        db.add(job)
-        db.commit()
-        db.refresh(job)
-
-        task = (refresh_metadata_task.delay(job.id))
-        job.task_id = task.id
-
-        db.add(job)
-        db.commit()
-
-        return task.id
-
+        service = JobService()
+        active = service.active_job(db, JobType.METADATA_REFRESH)
+        if active:
+            return f"metadata refresh already active: {active.id}"
+        return service.start_job(db, None, JobType.METADATA_REFRESH, details="Scheduled metadata refresh").task_id
     finally:
         db.close()
