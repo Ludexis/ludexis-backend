@@ -9,6 +9,7 @@ class JobHistoryBase(BaseModel):
     job_type: JobType
     status: JobStatus | None = None
     progress: int | None = 0
+    retry_count: int = 0
     details: str | None = None
     result: str | None = None
     task_id: str | None = None

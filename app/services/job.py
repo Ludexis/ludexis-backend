@@ -1,5 +1,6 @@
 from datetime import datetime, UTC
 
+from app.models.job_history import JobHistory
 from app.models.user import User
 from app.repositories.job_history import JobHistoryRepository
 from app.tasks.celery_app import celery_app
@@ -32,18 +33,26 @@ class JobService:
     def get_job(self, db: Session, job_id: str):
         return self.repo.get(db, job_id)
 
-    def start_job(self, db: Session, user: User | None, job_type: JobType):
+    def start_job(self, db: Session, user: User | None, job_type: JobType, details: str | None = None, task_kwargs: dict | None = None):
         job = self.repo.create(db, {
             "job_type": job_type,
             "status": JobStatus.PENDING,
             "progress": 0,
-            "details": "Queued",
+            "details": details or "Queued",
             "user_id": user.id if user else None,
         })
-        task = self._select_task(job_type).apply_async(args=[job.id])
-        job.task_id = task.id
-        job.details = f"Queued task {task.id}"
-        return self.repo.update(db, job, {"task_id": task.id, "details": job.details})
+        task = self._select_task(job_type).apply_async(args=[job.id], kwargs=task_kwargs or {})
+        return self.repo.update(db, job, {"task_id": task.id, "details": details or f"Queued task {task.id}"})
+
+    def active_job(self, db: Session, job_type: JobType):
+        return (
+            db.query(JobHistory)
+            .filter(
+                JobHistory.job_type == job_type,
+                JobHistory.status.in_([JobStatus.PENDING, JobStatus.RUNNING]),
+            )
+            .first()
+        )
 
     def _select_task(self, job_type: JobType):
         return {
