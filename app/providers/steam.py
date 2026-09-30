@@ -85,6 +85,16 @@ class SteamProvider(MetadataProvider):
         logo_urls = []
         artwork_urls = []
 
+        # appdetails has no portrait cover; the store CDN serves one per app id (missing for some apps).
+        cover_urls.append(
+            f"https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/{external_id}/library_600x900.jpg"
+        )
+        artwork_urls.extend(
+            screenshot["path_full"]
+            for screenshot in data.get("screenshots", [])
+            if screenshot.get("path_full")
+        )
+
         header = data.get(
             "header_image"
         )

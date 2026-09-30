@@ -11,9 +11,10 @@ from app.models.screenshot import Screenshot
 from app.repositories.archive_entry import ArchiveEntryRepository
 from app.repositories.screenshot import ScreenshotRepository
 from app.services.storage import StorageService
+from app.schemas.metadata import MetadataDetails
 from app.services.metadata import MetadataService
 from app.utils.artwork import ArtworkType, build_artwork_relative_path, is_allowed_artwork_mime_type
-from app.utils.enums import VerificationStatus
+from app.utils.enums import MetadataStatus
 from app.models.screenshot import Screenshot
 
 from app.core.logging import get_logger
@@ -28,11 +29,19 @@ logger = get_logger(__name__)
 
 
 class ArtworkService:
-    def __init__(self) -> None:
+    def __init__(self, metadata_service: MetadataService | None = None) -> None:
         self.entry_repo = ArchiveEntryRepository()
         self.screenshot_repo = ScreenshotRepository()
         self.storage = StorageService()
-        self.metadata_service = MetadataService()
+        self.metadata_service = metadata_service or MetadataService()
+
+    def _entry_details(self, entry: ArchiveEntry) -> MetadataDetails | None:
+        # Prefer the stored provider match; fall back to a title search only for entries without one.
+        return self.metadata_service.get_merged_details(
+            entry.title,
+            entry.metadata_source if entry.metadata_source_code else None,
+            entry.metadata_source_code,
+        )
 
     def _read_file(self, file: UploadFile) -> bytes:
         file.file.seek(0)
@@ -141,7 +150,7 @@ class ArtworkService:
                 best_url = url
         return best_url
 
-    def auto_download_cover(self, db: Session, archive_entry_id: str, force: bool = False,) -> bool:
+    def auto_download_cover(self, db: Session, archive_entry_id: str, force: bool = False, details: MetadataDetails | None = None,) -> bool:
         entry = self.entry_repo.get_active(
             db,
             archive_entry_id,
@@ -159,12 +168,7 @@ class ArtworkService:
         ):
             return True
 
-        details = (
-            self.metadata_service
-            .get_merged_details(
-                entry.title
-            )
-        )
+        details = details or self._entry_details(entry)
         if (
             details is None
             or
@@ -221,7 +225,7 @@ class ArtworkService:
         db.refresh(entry)
         return True
 
-    def auto_download_banner(self, db: Session, archive_entry_id: str, force: bool = False,) -> bool:
+    def auto_download_banner(self, db: Session, archive_entry_id: str, force: bool = False, details: MetadataDetails | None = None,) -> bool:
         entry = self.entry_repo.get_active(
             db,
             archive_entry_id,
@@ -238,12 +242,7 @@ class ArtworkService:
             not force
         ):
             return True
-        details = (
-            self.metadata_service
-            .get_merged_details(
-                entry.title
-            )
-        )
+        details = details or self._entry_details(entry)
         if (
             details is None
             or
@@ -296,7 +295,7 @@ class ArtworkService:
         )
         return True
 
-    def auto_download_logo(self, db: Session, archive_entry_id: str, force: bool = False,) -> bool:
+    def auto_download_logo(self, db: Session, archive_entry_id: str, force: bool = False, details: MetadataDetails | None = None,) -> bool:
         entry = self.entry_repo.get_active(
             db,
             archive_entry_id,
@@ -313,12 +312,7 @@ class ArtworkService:
             not force
         ):
             return True
-        details = (
-            self.metadata_service
-            .get_merged_details(
-                entry.title
-            )
-        )
+        details = details or self._entry_details(entry)
         if (
             details is None
             or
@@ -371,7 +365,7 @@ class ArtworkService:
         )
         return True
 
-    def auto_download_screenshots(self, db: Session, archive_entry_id: str, force: bool = False,) -> bool:
+    def auto_download_screenshots(self, db: Session, archive_entry_id: str, force: bool = False, details: MetadataDetails | None = None,) -> bool:
         entry = self.entry_repo.get_active(
             db,
             archive_entry_id,
@@ -384,12 +378,7 @@ class ArtworkService:
             not force
         ):
             return True
-        details = (
-            self.metadata_service
-            .get_merged_details(
-                entry.title
-            )
-        )
+        details = details or self._entry_details(entry)
         if (
             details is None
             or
@@ -415,48 +404,53 @@ class ArtworkService:
         )
         return True
 
+    def fill_missing_artwork(self, db: Session, entry: ArchiveEntry, repair: list[str] | tuple[str, ...] = (),) -> int:
+        # Provider details are fetched once and shared by every asset type that needs downloading.
+        wanted = [
+            kind for kind in ("cover", "banner", "logo")
+            if kind in repair or not getattr(entry, f"{kind}_path")
+        ]
+        if "screenshots" in repair or len(entry.screenshots) == 0:
+            wanted.append("screenshots")
+        if not wanted:
+            return 0
+        details = self._entry_details(entry)
+        if details is None:
+            return 0
+        downloaders = {
+            "cover": self.auto_download_cover,
+            "banner": self.auto_download_banner,
+            "logo": self.auto_download_logo,
+            "screenshots": self.auto_download_screenshots,
+        }
+        downloaded = 0
+        for kind in wanted:
+            try:
+                if downloaders[kind](db, entry.id, force=True, details=details):
+                    downloaded += 1
+            except Exception:
+                db.rollback()
+                artwork_validation_failures_total.inc()
+                logger.warning(
+                    "Artwork download failed",
+                    extra={
+                        "archive_id": entry.id,
+                        "title": entry.title,
+                        "artwork_type": kind,
+                    },
+                )
+        return downloaded
+
     def auto_download_missing_artwork(self, db: Session,) -> dict:
         artwork_auto_download_runs_total.inc()
-        entries = (
-            self.entry_repo
-            .list_active(db)
-        )
         downloaded = 0
         failed = 0
-        for entry in entries:
+        for entry in self.entry_repo.list_active(db, limit=None):
             try:
-
-                if not entry.cover_path:
-                    if self.auto_download_cover(
-                        db,
-                        entry.id,
-                    ):
-                        downloaded += 1
-
-                if not entry.banner_path:
-                    if self.auto_download_banner(
-                        db,
-                        entry.id,
-                    ):
-                        downloaded += 1
-
-                if not entry.logo_path:
-                    if self.auto_download_logo(
-                        db,
-                        entry.id,
-                    ):
-                        downloaded += 1
-
-                if len(entry.screenshots) == 0:
-                    if self.auto_download_screenshots(
-                        db,
-                        entry.id,
-                    ):
-                        downloaded += 1
-
+                downloaded += self.fill_missing_artwork(db, entry)
             except Exception:
+                db.rollback()
                 failed += 1
-                artwork_validation_failures_total.inc()
                 logger.warning(
                     "Artwork download failed",
                     extra={
@@ -612,7 +606,7 @@ class ArtworkService:
         raise ValueError("Artwork not found")
 
     def list_missing_artwork(self, db: Session) -> list[dict[str, str | list[str]]]:
-        entries = self.entry_repo.list_active(db)
+        entries = self.entry_repo.list_active(db, limit=None)
         missing = []
         for entry in entries:
             missing_types: list[str] = []
@@ -635,7 +629,8 @@ class ArtworkService:
         return missing
 
     def validate_all_artwork(self, db: Session,) -> list[dict]:
-        entries = self.entry_repo.list_active(db)
+        # Reports artwork problems only; verification_status belongs to the archive file and is set by integrity checks.
+        entries = self.entry_repo.list_active(db, limit=None)
         results = []
         for entry in entries:
             missing_types: list[str] = []
@@ -684,114 +679,48 @@ class ArtworkService:
                     corrupt_types.append(
                         artwork_type.value
                     )
-            if (
-                hasattr(
-                    entry,
-                    "screenshots",
-                )
-                and
-                len(
-                    entry.screenshots
-                ) == 0
-            ):
-                pass
-            if (
-                missing_types
-                or
-                corrupt_types
-            ):
-                entry.verification_status = (
-                    VerificationStatus.MISSING
-                )
-            else:
-                entry.verification_status = (
-                    VerificationStatus.VERIFIED
-                )
-            db.add(entry)
             results.append(
                 {
                     "archive_id": entry.id,
                     "title": entry.title,
-                    "verification_status":
-                        entry.verification_status.value,
+                    "complete": not (missing_types or corrupt_types),
                     "missing_types":
                         missing_types,
                     "corrupt_types":
                         corrupt_types,
                 }
             )
-        db.commit()
         return results
 
     def validate_and_redownload_artwork(self, db: Session,) -> dict:
-        validation = (
-            self.validate_all_artwork(
-                db
-            )
-        )
+        validation = self.validate_all_artwork(db)
         repaired = 0
         failed = 0
         for item in validation:
-            needs_repair = (
-                "cover" in item["missing_types"]
-                or
-                "cover" in item["corrupt_types"]
-            )
-            if not needs_repair:
+            broken = item["missing_types"] + item["corrupt_types"]
+            if not broken:
+                continue
+            entry = self.entry_repo.get_active(db, item["archive_id"])
+            # Only entries with a provider match have a trustworthy artwork source.
+            if (
+                entry is None
+                or not entry.metadata_source_code
+                or entry.metadata_status == MetadataStatus.UNMATCHED
+            ):
                 continue
             try:
-
-                repaired_this_entry = False
-
-                if (
-                    "cover" in item["missing_types"]
-                    or
-                    "cover" in item["corrupt_types"]
-                ):
-                    repaired_this_entry |= (
-                        self.auto_download_cover(
-                            db,
-                            item["archive_id"],
-                            force=True,
-                        )
-                    )
-
-                if (
-                    "banner" in item["missing_types"]
-                    or
-                    "banner" in item["corrupt_types"]
-                ):
-                    repaired_this_entry |= (
-                        self.auto_download_banner(
-                            db,
-                            item["archive_id"],
-                            force=True,
-                        )
-                    )
-
-                if (
-                    "logo" in item["missing_types"]
-                    or
-                    "logo" in item["corrupt_types"]
-                ):
-                    repaired_this_entry |= (
-                        self.auto_download_logo(
-                            db,
-                            item["archive_id"],
-                            force=True,
-                        )
-                    )
-
-                if repaired_this_entry:
+                if self.fill_missing_artwork(db, entry, repair=broken):
                     repaired += 1
-
             except Exception:
+                db.rollback()
                 failed += 1
         return {
+            "checked": len(validation),
+            "incomplete": sum(1 for item in validation if not item["complete"]),
             "repaired": repaired,
             "failed": failed,
         }
-    
+
     def _score_image(self, contents: bytes, ) -> int:
         score = 0
         try:
