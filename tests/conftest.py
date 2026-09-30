@@ -101,3 +101,18 @@ def override_get_db():
 
 
 app.dependency_overrides[get_db] = override_get_db
+
+@pytest.fixture(autouse=True)
+def no_celery_broker(monkeypatch):
+    # Tasks open their own sessions on the application database, so tests must never queue real
+    # messages: a running worker would execute them against the live database.
+    from itertools import count
+    from types import SimpleNamespace
+    from celery.app.task import Task
+
+    task_ids = count(1)
+    monkeypatch.setattr(
+        Task,
+        "apply_async",
+        lambda self, *args, **kwargs: SimpleNamespace(id=f"test-task-{next(task_ids)}"),
+    )
