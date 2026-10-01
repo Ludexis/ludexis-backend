@@ -2,7 +2,7 @@ import json
 from pathlib import Path
 from typing import List
 
-from pydantic import PostgresDsn, RedisDsn
+from pydantic import PostgresDsn, RedisDsn, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 class Settings(BaseSettings):
@@ -46,6 +46,14 @@ class Settings(BaseSettings):
     JOB_RETRY_BACKOFF_MAX: int = 300
 
     CORS_ORIGINS: str = "http://localhost:3000,http://127.0.0.1:3000"
+
+    @field_validator("JWT_SECRET_KEY")
+    @classmethod
+    def _require_strong_jwt_secret(cls, value: str) -> str:
+        # Placeholders such as CHANGE_ME would let anyone forge tokens.
+        if len(value) < 32:
+            raise ValueError("JWT_SECRET_KEY must be at least 32 characters (generate one with: openssl rand -hex 32)")
+        return value
 
     @property
     def cors_origins_list(self) -> List[str]:

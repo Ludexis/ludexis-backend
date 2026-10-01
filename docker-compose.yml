@@ -8,7 +8,7 @@ services:
 
     environment:
       POSTGRES_USER: ludexis
-      POSTGRES_PASSWORD: ludexis
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-ludexis}
       POSTGRES_DB: ludexis
 
     volumes:
@@ -50,8 +50,10 @@ services:
     env_file:
       - .env.docker
 
-    environment:
+    environment: &backend-environment
       ARTWORK_STORAGE_PATH: /artwork
+      DATABASE_URL: postgresql+psycopg://ludexis:${POSTGRES_PASSWORD:-ludexis}@db:5432/ludexis
+      JWT_SECRET_KEY: ${JWT_SECRET_KEY:?Set JWT_SECRET_KEY in backend/.env or the shell}
 
     volumes:
       - .:/usr/src/app
@@ -87,8 +89,7 @@ services:
     env_file:
       - .env.docker
 
-    environment:
-      ARTWORK_STORAGE_PATH: /artwork
+    environment: *backend-environment
 
     volumes:
       - .:/usr/src/app
@@ -96,6 +97,23 @@ services:
 
     depends_on:
       - db
+      - redis
+
+  beat:
+    build:
+      context: ..
+      dockerfile: backend/Dockerfile
+    restart: unless-stopped
+
+    # Fires the daily metadata refresh and artwork validation jobs.
+    command: celery -A app.tasks.celery_app beat --loglevel=info --schedule /tmp/celerybeat-schedule
+
+    env_file:
+      - .env.docker
+
+    environment: *backend-environment
+
+    depends_on:
       - redis
 
   prometheus:
@@ -121,7 +139,7 @@ services:
 
     environment:
       GF_SECURITY_ADMIN_USER: admin
-      GF_SECURITY_ADMIN_PASSWORD: admin
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-admin}
 
     volumes:
       - grafana_data:/var/lib/grafana

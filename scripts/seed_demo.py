@@ -104,7 +104,7 @@ def seed(db) -> list[str]:
         admin = User(
             username="admin",
             email="admin@example.com",
-            hashed_password=hash_password("Admin123!"),
+            hashed_password=hash_password(os.environ.get("DEMO_ADMIN_PASSWORD", "Admin123!")),
             is_active=True,
             is_superuser=True,
         )
