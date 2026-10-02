@@ -4,7 +4,7 @@ from datetime import UTC, datetime
 from sqlalchemy.orm import Session
 from app.models.archive_entry import ArchiveEntry
 from app.utils.enums import MetadataStatus
-from app.providers import GOGProvider, IGDBProvider, ManualProvider, SteamProvider
+from app.providers import GOGProvider, IGDBProvider, ManualProvider, SteamProvider, VNDBProvider
 from app.providers.metadata_provider import MetadataProvider
 from app.schemas.metadata import MetadataDetails, MetadataSearchResult
 from app.services.grouping import GroupingService
@@ -13,10 +13,14 @@ from app.services.metadata_conflict import MetadataConflictResolver
 from app.models.genre import Genre
 from app.models.developer import Developer
 from app.models.publisher import Publisher
+from app.models.tag import Tag
+from app.models.franchise import Franchise
 
 from app.repositories.genre import GenreRepository
 from app.repositories.developer import DeveloperRepository
 from app.repositories.publisher import PublisherRepository
+from app.repositories.tag import TagRepository
+from app.repositories.franchise import FranchiseRepository
 
 from app.core.logging import get_logger
 from app.core.metrics import metadata_searches_total
@@ -25,6 +29,8 @@ logger = get_logger(__name__)
 
 MATCHED_THRESHOLD = 0.85
 PARTIAL_THRESHOLD = 0.70
+# Providers auto-matching tries, in order, until one gives a confident match.
+DEFAULT_PROVIDER_ORDER = ["VNDB", "IGDB", "Steam"]
 
 
 def title_similarity(left: str, right: str) -> float:
@@ -42,8 +48,9 @@ def title_similarity(left: str, right: str) -> float:
     return (characters + words) / 2
 
 class MetadataService:
-    def __init__(self, providers: list[MetadataProvider] | None = None) -> None:
+    def __init__(self, providers: list[MetadataProvider] | None = None, provider_order: list[str] | None = None) -> None:
         self.providers = providers or [
+            VNDBProvider(),
             IGDBProvider(),
             SteamProvider(),
             GOGProvider(),
@@ -52,9 +59,13 @@ class MetadataService:
         self.conflict_resolver = (MetadataConflictResolver())
         self.providers.sort(key=lambda provider: provider.priority)
         self.provider_map = {provider.name: provider for provider in self.providers}
+        # Injected providers are all matched against, in priority order, unless an order is given.
+        self._provider_order = provider_order or ([provider.name for provider in self.providers] if providers else None)
         self.genre_repo = GenreRepository()
         self.developer_repo = DeveloperRepository()
         self.publisher_repo = PublisherRepository()
+        self.tag_repo = TagRepository()
+        self.franchise_repo = FranchiseRepository()
 
     def _sync_genres(self, db, archive, genres: list[str],):
         archive.genres.clear()
@@ -111,12 +122,36 @@ class MetadataService:
                 publisher
             )
 
+    def _sync_tags(self, db, archive, tags: list[str],):
+        # Only provider-imported tags are replaced, so tags a user added stay on the entry.
+        archive.tags = [tag for tag in archive.tags if tag.origin != "provider"]
+        for name in dict.fromkeys(name.strip()[:128] for name in tags if name.strip()):
+            tag = self.tag_repo.get_by_name(db, name)
+            if tag is None:
+                tag = Tag(name=name, origin="provider")
+                db.add(tag)
+                db.flush()
+            if tag not in archive.tags:
+                archive.tags.append(tag)
+
+    def _sync_franchise(self, db, archive, franchises: list[str],):
+        # A franchise the user already set is kept.
+        if archive.franchise_id or not franchises:
+            return
+        name = franchises[0][:256]
+        franchise = self.franchise_repo.get_by_name(db, name)
+        if franchise is None:
+            franchise = Franchise(name=name)
+            db.add(franchise)
+            db.flush()
+        archive.franchise_id = franchise.id
+
     def auto_match(self, title: str, ) -> tuple[MetadataSearchResult | None, float]:
-        # Providers are tried in priority order (IGDB first); a confident match stops the search,
-        # otherwise the best candidate across all providers wins.
+        # Providers are tried in the configured order; a confident match stops the search,
+        # otherwise the best candidate across them wins.
         best_result = None
         best_score = 0.0
-        for provider in self._get_providers(["IGDB"]):
+        for provider in self._match_providers():
             for result in self._search_provider(provider, title, limit=20):
                 score = title_similarity(title, result.title)
                 result.score = score
@@ -291,6 +326,12 @@ class MetadataService:
     def _get_provider(self, name: str) -> MetadataProvider | None:
         return self.provider_map.get(name)
 
+    def _match_providers(self) -> list[MetadataProvider]:
+        return [self.provider_map[name] for name in self.provider_order() if name in self.provider_map]
+
+    def provider_order(self) -> list[str]:
+        return self._provider_order or DEFAULT_PROVIDER_ORDER
+
     def _get_providers(self, preferred_providers: list[str] | None) -> list[MetadataProvider]:
         if not preferred_providers:
             return self.providers
@@ -346,6 +387,8 @@ class MetadataService:
             archive,
             details.publishers,
         )
+        self._sync_tags(db, archive, details.tags)
+        self._sync_franchise(db, archive, details.franchises)
         if details.description:
             archive.description = details.description
         if details.release_date:

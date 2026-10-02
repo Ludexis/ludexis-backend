@@ -148,6 +148,7 @@ class SteamProvider(MetadataProvider):
             genres=genres,
             developers=developers,
             publishers=publishers,
+            # Steam "categories" are store features (Family Sharing, Achievements), not descriptive tags.
             tags=[],
             cover_urls=cover_urls,
             banner_urls=banner_urls,

@@ -40,6 +40,7 @@ class TagUpdate(BaseModel):
 
 class TagRead(TagBase):
     id: str
+    origin: str = "user"
     entry_count: int = 0
 
     model_config = {

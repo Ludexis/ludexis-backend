@@ -45,6 +45,8 @@ class MetadataConflictResolver:
                 secondary.tags,
             ),
 
+            franchises=primary.franchises or secondary.franchises,
+
             cover_urls=list(
                 dict.fromkeys(
                     primary.cover_urls

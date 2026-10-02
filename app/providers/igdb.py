@@ -5,6 +5,8 @@ from app.providers.metadata_provider import MetadataProvider
 from app.schemas.metadata import MetadataDetails, MetadataSearchResult
 
 
+IGDB_KEYWORD_LIMIT = 10
+
 class IGDBProvider(MetadataProvider):
     name = "IGDB"
     priority = 10
@@ -75,7 +77,12 @@ class IGDBProvider(MetadataProvider):
             involved_companies.developer,
             involved_companies.publisher,
             cover.url,
-            artworks.url;
+            artworks.url,
+            screenshots.url,
+            franchises.name,
+            collections.name,
+            themes.name,
+            keywords.name;
         where id = {external_id};
         """
 
@@ -121,10 +128,7 @@ class IGDBProvider(MetadataProvider):
                 url
             )
 
-        for artwork in game.get(
-            "artworks",
-            [],
-        ):
+        for artwork in game.get("artworks", []) + game.get("screenshots", []):
             if artwork.get("url"):
                 url = (
                     "https:" + artwork["url"]
@@ -163,7 +167,14 @@ class IGDBProvider(MetadataProvider):
             genres=genres,
             developers=developers,
             publishers=publishers,
-            tags=[],
+            # Themes describe the game; keywords are numerous and noisy, so only the first few are kept.
+            tags=list(dict.fromkeys(
+                [item["name"] for item in game.get("themes", []) if item.get("name")]
+                + [item["name"] for item in game.get("keywords", [])[:IGDB_KEYWORD_LIMIT] if item.get("name") and not item["name"].startswith("#")]
+            )),
+            franchises=list(dict.fromkeys(
+                item["name"] for item in game.get("franchises", []) + game.get("collections", []) if item.get("name")
+            )),
             cover_urls=cover_urls,
             banner_urls=banner_urls,
             logo_urls=logo_urls,

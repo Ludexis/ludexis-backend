@@ -17,6 +17,8 @@ class Tag(Base):
     name: str = mapped_column(sa.String(128), unique=True, nullable=False)
     description: str = mapped_column(sa.Text, nullable=True)
     color: str = mapped_column(sa.String(16), nullable=True)
+    # "provider" tags were imported from metadata and are replaced on refresh; "user" tags are never touched.
+    origin: str = mapped_column(sa.String(16), nullable=False, default="user", server_default="user")
     created_at = mapped_column(sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False)
     updated_at = mapped_column(sa.DateTime(timezone=True), server_default=sa.func.now(), onupdate=sa.func.now(), nullable=False)
 
