@@ -137,6 +137,13 @@ class ArchiveEntryRead(ArchiveEntryBase, TimestampedModel):
     parent_series: ArchiveEntryReference | None = None
     related_entries: list[ArchiveEntryReference] = []
 
+    group_key: str | None = None
+    episode: int | None = None
+    season: int | None = None
+    is_primary_version: bool = True
+    # Set by grouped listings: how many versions share this entry's group.
+    version_count: int = 1
+
     @computed_field
     @property
     def tag_ids(self) -> list[str]:

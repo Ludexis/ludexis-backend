@@ -20,6 +20,8 @@ class Collection(Base):
     cover_path: str = mapped_column(sa.Text, nullable=True)
     banner_path: str = mapped_column(sa.Text, nullable=True)
     visibility: str = mapped_column(sa.String(32), nullable=False, default="public")
+    # Set when the scanner created this collection for a series; holds the series_key it gathers.
+    auto_key: str = mapped_column(sa.String(256), nullable=True, unique=True)
     created_at = mapped_column(sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False)
     updated_at = mapped_column(sa.DateTime(timezone=True), server_default=sa.func.now(), onupdate=sa.func.now(), nullable=False)
     deleted_at = mapped_column(sa.DateTime(timezone=True), nullable=True)

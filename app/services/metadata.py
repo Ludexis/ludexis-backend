@@ -7,6 +7,7 @@ from app.utils.enums import MetadataStatus
 from app.providers import GOGProvider, IGDBProvider, ManualProvider, SteamProvider
 from app.providers.metadata_provider import MetadataProvider
 from app.schemas.metadata import MetadataDetails, MetadataSearchResult
+from app.services.grouping import GroupingService
 from app.services.metadata_conflict import MetadataConflictResolver
 
 from app.models.genre import Genre
@@ -152,6 +153,8 @@ class MetadataService:
                 },
             )
             return False
+        if self._reuse_sibling_match(db, archive):
+            return True
         match, score = self.auto_match(
             archive.title,
         )
@@ -191,6 +194,31 @@ class MetadataService:
         )
         self.refresh_archive(db, archive)
         return (archive.metadata_status!= MetadataStatus.UNMATCHED)
+
+    def _reuse_sibling_match(self, db: Session, archive: ArchiveEntry) -> bool:
+        # Another version of the same game is already matched: reuse its source instead of searching again.
+        sibling = next(
+            (
+                entry for entry in GroupingService().siblings(db, archive)
+                if entry.metadata_source_code and entry.metadata_status in (MetadataStatus.MATCHED, MetadataStatus.MANUAL)
+            ),
+            None,
+        )
+        if sibling is None:
+            return False
+        archive.metadata_status = MetadataStatus.MATCHED
+        archive.metadata_source = sibling.metadata_source
+        archive.metadata_source_code = sibling.metadata_source_code
+        archive.metadata_confidence = sibling.metadata_confidence
+        archive.last_metadata_refresh = datetime.now(UTC)
+        db.add(archive)
+        db.commit()
+        logger.info(
+            "Archive metadata reused from sibling version",
+            extra={"archive_id": archive.id, "sibling_id": sibling.id},
+        )
+        self.refresh_archive(db, archive)
+        return True
 
     def search(self, query: str, preferred_providers: list[str] | None = None, limit: int = 20) -> list[MetadataSearchResult]:
         metadata_searches_total.inc()

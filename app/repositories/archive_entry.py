@@ -59,10 +59,13 @@ class ArchiveEntryRepository(BaseRepository[ArchiveEntry]):
         metadata_status: str | None = None,
         verification_status: str | None = None,
         storage_device: str | None = None,
+        group_versions: bool = False,
         offset: int = 0,
         limit: int = 100,
     ) -> list[ArchiveEntry]:
         filters = [ArchiveEntry.deleted_at.is_(None)]
+        if group_versions:
+            filters.append(ArchiveEntry.is_primary_version.is_(True))
 
         if query:
             search_value = f"%{query}%"
@@ -130,6 +133,26 @@ class ArchiveEntryRepository(BaseRepository[ArchiveEntry]):
                 ArchiveEntry.file_hash == file_hash,
                 ArchiveEntry.deleted_at.is_(None),
             )
+            .all()
+        )
+
+    def version_counts(self, db: Session, group_keys: set[str]) -> dict[str, int]:
+        if not group_keys:
+            return {}
+        rows = (
+            db.query(ArchiveEntry.group_key, sa.func.count(ArchiveEntry.id))
+            .filter(ArchiveEntry.group_key.in_(group_keys), ArchiveEntry.deleted_at.is_(None))
+            .group_by(ArchiveEntry.group_key)
+            .all()
+        )
+        return dict(rows)
+
+    def list_versions(self, db: Session, entry: ArchiveEntry) -> list[ArchiveEntry]:
+        if not entry.group_key:
+            return [entry]
+        return (
+            db.query(ArchiveEntry)
+            .filter(ArchiveEntry.group_key == entry.group_key, ArchiveEntry.deleted_at.is_(None))
             .all()
         )
 

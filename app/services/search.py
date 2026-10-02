@@ -27,10 +27,11 @@ class SearchService:
         metadata_status: str | None = None,
         verification_status: str | None = None,
         storage_device: str | None = None,
+        group_versions: bool = False,
         offset: int = 0,
         limit: int = 100,
     ) -> list[ArchiveEntry]:
-        return self.repo.search(
+        entries = self.repo.search(
             db,
             query=query,
             genre=genre,
@@ -41,6 +42,12 @@ class SearchService:
             metadata_status=metadata_status,
             verification_status=verification_status,
             storage_device=storage_device,
+            group_versions=group_versions,
             offset=offset,
             limit=limit,
         )
+        if group_versions:
+            counts = self.repo.version_counts(db, {entry.group_key for entry in entries if entry.group_key})
+            for entry in entries:
+                entry.version_count = counts.get(entry.group_key, 1)
+        return entries

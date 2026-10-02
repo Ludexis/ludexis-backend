@@ -48,6 +48,12 @@ class ArchiveEntry(Base):
     last_metadata_refresh = mapped_column(sa.DateTime(timezone=True), nullable=True)
     last_verified = mapped_column(sa.DateTime(timezone=True), nullable=True)
     verification_status: VerificationStatus = mapped_column(sa.Enum(VerificationStatus, name="verification_status"), nullable=False, default=VerificationStatus.UNKNOWN)
+    # Versions of one game share a group_key; episodes of one series share a series_key.
+    group_key: str = mapped_column(sa.String(256), nullable=True, index=True)
+    series_key: str = mapped_column(sa.String(256), nullable=True, index=True)
+    episode: int = mapped_column(sa.Integer, nullable=True)
+    season: int = mapped_column(sa.Integer, nullable=True)
+    is_primary_version: bool = mapped_column(sa.Boolean, nullable=False, default=True, server_default=sa.true())
     parent_series_id = mapped_column(sa.String(36), sa.ForeignKey("archive_entries.id", ondelete="SET NULL"), nullable=True)
     franchise_id = mapped_column(sa.String(36), sa.ForeignKey("franchises.id", ondelete="SET NULL"), nullable=True, index=True)
     library_id = mapped_column(

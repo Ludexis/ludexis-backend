@@ -11,6 +11,7 @@ from app.utils.enums import PermissionName
 from app.services.scanner import ScannerService
 from app.schemas.duplicates import DuplicateGroup
 from app.repositories.screenshot import ScreenshotRepository
+from app.services.grouping import version_order
 
 
 router = APIRouter(prefix="/archive-entries", tags=["archive_entries"])
@@ -64,6 +65,24 @@ def list_screenshots(
     if entry is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Archive entry not found")
     return screenshot_repo.list_by_entry(db, archive_entry_id)
+
+
+@router.get(
+    "/{archive_entry_id}/versions",
+    response_model=list[ArchiveEntryRead],
+    summary="List versions",
+    description="Return every version of the entry's game, newest first.",
+)
+def list_versions(
+    archive_entry_id: str,
+    current_user=Depends(get_current_active_user),
+    db: Session = Depends(get_db),
+):
+    entry = service.get(db, archive_entry_id)
+    if entry is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Archive entry not found")
+    versions = service.repo.list_versions(db, entry)
+    return sorted(versions, key=lambda e: version_order(e.version), reverse=True)
 
 
 @router.get(

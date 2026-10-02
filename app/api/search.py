@@ -27,6 +27,7 @@ def search_archive_entries(
     metadata_status: str | None = Query(None, description="Metadata status filter", examples=["MATCHED"]),
     verification_status: str | None = Query(None, description="Verification status filter", examples=["VERIFIED"]),
     storage_device: str | None = Query(None, description="Storage device filter", examples=["NAS-01"]),
+    group_versions: bool = Query(False, description="Return one entry per game, with version_count set"),
     offset: int = Query(0, description="Pagination offset", examples=[0]),
     limit: int = Query(100, description="Pagination limit", examples=[100]),
     current_user=Depends(get_current_active_user),
@@ -43,6 +44,7 @@ def search_archive_entries(
         metadata_status=metadata_status,
         verification_status=verification_status,
         storage_device=storage_device,
+        group_versions=group_versions,
         offset=offset,
         limit=limit,
     )

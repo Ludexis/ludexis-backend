@@ -14,6 +14,7 @@ from sqlalchemy.orm import Session
 from app.models.job_history import JobHistory
 from app.utils.enums import JobStatus
 from app.repositories.library import LibraryRepository
+from app.services.grouping import GroupingService
 
 from app.core.logging import get_logger
 from app.core.metrics import library_scans_total, incremental_scans_total
@@ -178,6 +179,7 @@ class ScannerService:
                 if on_progress:
                     on_progress(done, total)
 
+        stats.update(GroupingService().regroup(db))
         logger.info(
             f"{label} completed",
             extra={

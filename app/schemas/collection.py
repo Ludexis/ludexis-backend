@@ -65,6 +65,7 @@ class CollectionEntryRequest(BaseModel):
 
 class CollectionRead(CollectionBase, TimestampedModel):
     id: str
+    auto_key: str | None = None
     entry_ids: list[str] = []
 
     model_config = {
