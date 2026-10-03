@@ -8,6 +8,7 @@ from app.core.config import settings
 class IGDBClient:
     def __init__(self) -> None:
         self.access_token: str | None = None
+        self.client_id: str = ""
         self.expires_at: datetime | None = None
 
     def _token_expired(self) -> bool:
@@ -19,12 +20,26 @@ class IGDBClient:
 
         return datetime.now(UTC) >= self.expires_at
 
+    def credentials(self) -> tuple[str, str]:
+        # Environment variables win; otherwise the credentials saved in the admin settings are used.
+        if settings.TWITCH_CLIENT_ID and settings.TWITCH_CLIENT_SECRET:
+            return settings.TWITCH_CLIENT_ID, settings.TWITCH_CLIENT_SECRET
+        from app.db.session import SessionLocal
+        from app.services.settings import SettingsService
+
+        with SessionLocal() as db:
+            return SettingsService().igdb_credentials(db)
+
+    def configured(self) -> bool:
+        return all(self.credentials())
+
     def _refresh_token(self) -> None:
+        self.client_id, client_secret = self.credentials()
         response = httpx.post(
             settings.IGDB_TOKEN_URL,
             params={
-                "client_id": settings.TWITCH_CLIENT_ID,
-                "client_secret": settings.TWITCH_CLIENT_SECRET,
+                "client_id": self.client_id,
+                "client_secret": client_secret,
                 "grant_type": "client_credentials",
             },
             timeout=30,
@@ -49,7 +64,7 @@ class IGDBClient:
         self._ensure_token()
 
         return {
-            "Client-ID": settings.TWITCH_CLIENT_ID,
+            "Client-ID": self.client_id,
             "Authorization": f"Bearer {self.access_token}",
         }
 

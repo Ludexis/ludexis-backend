@@ -18,6 +18,7 @@ from app.api.roles import router as roles_router
 from app.api.scan import router as scan_router
 from app.api.search import router as search_router
 from app.api.setup import router as setup_router
+from app.api.system import router as system_router
 from app.api.tags import router as tags_router
 from app.api.users import router as users_router
 from app.api.health import router as health_router
@@ -25,6 +26,7 @@ from app.api.health import router as health_router
 api_router = APIRouter(prefix=settings.API_PREFIX)
 api_router.include_router(auth_router)
 api_router.include_router(setup_router)
+api_router.include_router(system_router)
 api_router.include_router(users_router)
 api_router.include_router(roles_router)
 api_router.include_router(permissions_router)

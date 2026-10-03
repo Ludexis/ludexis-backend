@@ -9,6 +9,7 @@ from app.providers.metadata_provider import MetadataProvider
 from app.schemas.metadata import MetadataDetails, MetadataSearchResult
 from app.services.grouping import GroupingService
 from app.services.metadata_conflict import MetadataConflictResolver
+from app.services.settings import SettingsService
 
 from app.models.genre import Genre
 from app.models.developer import Developer
@@ -146,12 +147,12 @@ class MetadataService:
             db.flush()
         archive.franchise_id = franchise.id
 
-    def auto_match(self, title: str, ) -> tuple[MetadataSearchResult | None, float]:
+    def auto_match(self, title: str, db: Session | None = None) -> tuple[MetadataSearchResult | None, float]:
         # Providers are tried in the configured order; a confident match stops the search,
         # otherwise the best candidate across them wins.
         best_result = None
         best_score = 0.0
-        for provider in self._match_providers():
+        for provider in self._match_providers(db):
             for result in self._search_provider(provider, title, limit=20):
                 score = title_similarity(title, result.title)
                 result.score = score
@@ -190,9 +191,7 @@ class MetadataService:
             return False
         if self._reuse_sibling_match(db, archive):
             return True
-        match, score = self.auto_match(
-            archive.title,
-        )
+        match, score = self.auto_match(archive.title, db)
         archive.last_metadata_refresh = datetime.now(UTC)
         archive.metadata_confidence = round(score, 3)
         if match is None or score < PARTIAL_THRESHOLD:
@@ -326,11 +325,15 @@ class MetadataService:
     def _get_provider(self, name: str) -> MetadataProvider | None:
         return self.provider_map.get(name)
 
-    def _match_providers(self) -> list[MetadataProvider]:
-        return [self.provider_map[name] for name in self.provider_order() if name in self.provider_map]
+    def _match_providers(self, db: Session | None = None) -> list[MetadataProvider]:
+        return [self.provider_map[name] for name in self.provider_order(db) if name in self.provider_map]
 
-    def provider_order(self) -> list[str]:
-        return self._provider_order or DEFAULT_PROVIDER_ORDER
+    def provider_order(self, db: Session | None = None) -> list[str]:
+        if self._provider_order:
+            return self._provider_order
+        if db is not None:
+            return SettingsService().get(db, "provider_order")
+        return DEFAULT_PROVIDER_ORDER
 
     def _get_providers(self, preferred_providers: list[str] | None) -> list[MetadataProvider]:
         if not preferred_providers:

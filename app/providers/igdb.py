@@ -20,7 +20,8 @@ class IGDBProvider(MetadataProvider):
         limit: int = 20,
     ) -> list[MetadataSearchResult]:
 
-        if not query:
+        # Without Twitch credentials IGDB is skipped rather than failing every search.
+        if not query or not self.client.configured():
             return []
 
         igdb_query = f"""

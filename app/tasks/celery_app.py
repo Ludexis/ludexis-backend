@@ -30,26 +30,14 @@ celery_app.conf.update(
 import app.tasks.scan_tasks  # noqa: F401
 import app.tasks.artwork_tasks  # noqa: F401
 import app.tasks.metadata_tasks  # noqa: F401
+import app.tasks.scheduler_tasks  # noqa: F401
 
 
 celery_app.conf.beat_schedule = {
-    "daily-metadata-refresh": {
-        "task":
-            "app.tasks.metadata_tasks.scheduled_metadata_refresh_task",
-        "schedule":
-            crontab(
-                hour=3,
-                minute=0,
-            ),
-    },
-
-    "daily-artwork-validation": {
-        "task":
-            "app.tasks.artwork_tasks.scheduled_artwork_validation_task",
-        "schedule":
-            crontab(
-                hour=4,
-                minute=0,
-            ),
+    # Schedules live in the scheduled_tasks table and are edited from the admin UI; the tick starts due ones.
+    "scheduler-tick": {
+        "task": "app.tasks.scheduler_tasks.scheduler_tick_task",
+        "schedule": crontab(minute="*/5"),
     },
 }
+
