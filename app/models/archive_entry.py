@@ -22,6 +22,7 @@ class ArchiveEntry(Base):
         sa.Index("ix_archive_entries_title_trgm", "title", postgresql_using="gin", postgresql_ops={"title": "gin_trgm_ops"}),
         sa.Index("ix_archive_entries_description_trgm", "description", postgresql_using="gin", postgresql_ops={"description": "gin_trgm_ops"}),
         sa.Index("ix_archive_entries_id_covering_deleted_at", "id", postgresql_include=["deleted_at"]),
+        sa.Index("ix_archive_entries_library_relative_path", "library_id", "relative_path"),
     )
 
     id: str = mapped_column(sa.String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
@@ -32,6 +33,8 @@ class ArchiveEntry(Base):
     release_date = mapped_column(sa.Date, nullable=True)
     archive_type: str = mapped_column(sa.String(64), nullable=True)
     file_path: str = mapped_column(sa.Text, nullable=False)
+    # Path below the library root with forward slashes; re-links entries when the root moves.
+    relative_path: str = mapped_column(sa.Text, nullable=True)
     file_size: int = mapped_column(sa.BigInteger, nullable=True,)
     modified_time = mapped_column(sa.DateTime(timezone=True), nullable=True,)
     file_hash: str = mapped_column(sa.String(64), nullable=True,)
@@ -77,6 +80,11 @@ class ArchiveEntry(Base):
     ratings = relationship("Rating", back_populates="archive_entry", cascade="all, delete-orphan")
     metadata_source_rel = relationship("MetadataSource", back_populates="archive_entries")
     parent_series = relationship("ArchiveEntry", remote_side=[id], backref="child_entries")
+    @property
+    def library_status(self) -> str | None:
+        # lazy-loads the library per entry; join it in list queries if pages get large.
+        return self.library.status if self.library is not None else None
+
     related_entries = relationship(
         "ArchiveEntry",
         secondary=archive_entry_relations,

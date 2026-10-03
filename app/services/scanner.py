@@ -8,7 +8,8 @@ import time
 from app.core.config import settings
 from app.models.archive_entry import ArchiveEntry
 from app.repositories.archive_entry import ArchiveEntryRepository
-from app.utils.enums import MetadataStatus, VerificationStatus
+from app.utils.enums import LibraryStatus, MetadataStatus, VerificationStatus
+from app.models.library import Library
 from app.utils.normalization import parse_archive_name
 from sqlalchemy.orm import Session
 from app.models.job_history import JobHistory
@@ -42,6 +43,7 @@ class ArchiveScanItem:
     file_size: int | None = None
     modified_time: datetime | None = None
     file_hash: str | None = None
+    relative_path: str | None = None
 
 
 class ScannerService:
@@ -97,6 +99,9 @@ class ScannerService:
         }
         archives = self.repo.list_all(db)
         for archive in archives:
+            # An unplugged drive must not turn its entries MISSING.
+            if archive.library is not None and archive.library.status == LibraryStatus.OFFLINE:
+                continue
             status = self._verify_archive(
                 db,
                 archive,
@@ -135,22 +140,34 @@ class ScannerService:
                 "scan_root": scan_root,
             },
         )
+        offline: list[str] = []
         if scan_root:
-            targets = [(None, Path(scan_root))]
+            targets = [(None, Path(scan_root), False)]
         else:
-            targets = [
-                (library.id, Path(library.path))
-                for library in self.library_repo.list_active(db)
-                if library.enabled
-            ]
+            targets = []
+            for library in self.library_repo.list_active(db):
+                if not library.enabled:
+                    continue
+                was_offline = library.status == LibraryStatus.OFFLINE
+                if self.check_library(db, library):
+                    targets.append((library, Path(library.path), was_offline))
+                else:
+                    offline.append(library.name)
 
         # Discover everything up front so progress is reported against a known total.
-        batches = [(library_id, self._discover_items(path)) for library_id, path in targets]
+        batches = []
+        for library, root, reconnected in targets:
+            items = self._discover_items(root)
+            if library is not None:
+                for item in items:
+                    item.relative_path = self._relative_path(item.file_path, root)
+            batches.append((library, items, reconnected))
         if incremental:
             existing_entries = {entry.file_path: entry for entry in self.repo.list_all(db)}
+            # A library that just came back online is scanned in full.
             batches = [
-                (library_id, [item for item in items if self._needs_processing(item, existing_entries)])
-                for library_id, items in batches
+                (library, items if reconnected else [item for item in items if self._needs_processing(item, existing_entries)], reconnected)
+                for library, items, reconnected in batches
             ]
 
         stats = {
@@ -161,9 +178,13 @@ class ScannerService:
             "cancelled": False,
             "created_ids": [],
         }
-        total = sum(len(items) for _, items in batches)
+        stats["offline_libraries"] = offline
+        stats["reconnected_libraries"] = [library.name for library, _, reconnected in batches if reconnected]
+        stats["missing"] = 0
+        total = sum(len(items) for _, items, _ in batches)
         done = 0
-        for library_id, items in batches:
+        for library, items, _ in batches:
+            library_id = library.id if library is not None else None
             for item in items:
                 if self._job_cancelled(db, job_id):
                     stats["cancelled"] = True
@@ -179,6 +200,11 @@ class ScannerService:
                 if on_progress:
                     on_progress(done, total)
 
+        for library, _, _ in batches:
+            if library is not None:
+                stats["missing"] += self._mark_availability(db, library)
+                library.last_scan_at = datetime.now(timezone.utc)
+        db.commit()
         stats.update(GroupingService().regroup(db))
         logger.info(
             f"{label} completed",
@@ -191,6 +217,45 @@ class ScannerService:
             },
         )
         return stats
+
+    def check_library(self, db: Session, library: Library) -> bool:
+        """Record whether the library folder is reachable; offline libraries are skipped, not emptied."""
+        root = Path(library.path)
+        error = None
+        try:
+            if not root.is_dir():
+                error = "Library folder not found"
+            elif not any(root.iterdir()) and self.repo.count_in_library(db, library.id):
+                # An unplugged drive behind a bind mount shows up as an empty folder.
+                error = "Library folder is empty but has indexed entries"
+        except OSError as exc:
+            error = f"Library folder not readable: {exc}"
+        library.status = LibraryStatus.OFFLINE.value if error else LibraryStatus.ONLINE.value
+        library.last_error = error
+        if not error:
+            library.last_seen_at = datetime.now(timezone.utc)
+        db.commit()
+        if error:
+            logger.warning("Library offline", extra={"library": library.name, "path": library.path, "reason": error})
+        return error is None
+
+    def _relative_path(self, file_path: str, root: Path) -> str | None:
+        try:
+            return Path(file_path).relative_to(root.resolve()).as_posix()
+        except ValueError:
+            return None
+
+    def _mark_availability(self, db: Session, library: Library) -> int:
+        # Entries whose file is gone become MISSING; ones that came back are verified again later.
+        missing = 0
+        for entry in self.repo.list_in_library(db, library.id):
+            exists = Path(entry.file_path).exists()
+            if not exists and entry.verification_status != VerificationStatus.MISSING:
+                entry.verification_status = VerificationStatus.MISSING
+                missing += 1
+            elif exists and entry.verification_status == VerificationStatus.MISSING:
+                entry.verification_status = VerificationStatus.UNKNOWN
+        return missing
 
     def _discover_items(self, base_path: Path) -> list[ArchiveScanItem]:
         if not base_path.exists():
@@ -291,18 +356,34 @@ class ScannerService:
             )
             missing_hash = existing.file_hash is None and item.archive_type != SUPPORTED_FOLDER_TYPE
             if not (changed or missing_hash):
+                if item.relative_path and existing.relative_path != item.relative_path:
+                    self.repo.update(db, existing, {"relative_path": item.relative_path})
                 return
             self._ensure_file_hash(item)
             update = {
                 "file_size": item.file_size,
                 "modified_time": item.modified_time,
                 "file_hash": item.file_hash,
+                "relative_path": item.relative_path or existing.relative_path,
             }
             if changed:
                 update["verification_status"] = VerificationStatus.UNKNOWN
             self.repo.update(db, existing, update)
             stats["updated"] += 1
             return
+
+        # Same place inside the library under a new root (re-pointed library, new drive letter):
+        # the entry moved with its library. Folders have no hash, so this is their only move key.
+        if library_id and item.relative_path:
+            candidate = self.repo.get_by_relative_path(db, library_id, item.relative_path)
+            if candidate is not None and not Path(candidate.file_path).exists():
+                self.repo.update(db, candidate, {
+                    "file_path": item.file_path,
+                    "file_size": item.file_size,
+                    "modified_time": item.modified_time,
+                })
+                stats["moved"] += 1
+                return
 
         self._ensure_file_hash(item)
         if item.file_hash:
@@ -318,6 +399,7 @@ class ScannerService:
                             "file_size": item.file_size,
                             "modified_time": item.modified_time,
                             "library_id": library_id or candidate.library_id,
+                            "relative_path": item.relative_path,
                         },
                     )
                     stats["moved"] += 1
@@ -331,6 +413,7 @@ class ScannerService:
             "metadata_status": MetadataStatus.UNMATCHED,
             "verification_status": VerificationStatus.UNKNOWN,
             "library_id": library_id,
+            "relative_path": item.relative_path,
             "file_size": item.file_size,
             "modified_time": item.modified_time,
             "file_hash": item.file_hash,

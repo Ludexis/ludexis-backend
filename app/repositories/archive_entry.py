@@ -43,6 +43,23 @@ class ArchiveEntryRepository(BaseRepository[ArchiveEntry]):
     def get_by_title(self, db: Session, title: str) -> ArchiveEntry | None:
         return db.query(ArchiveEntry).filter(sa.func.lower(ArchiveEntry.title) == title.lower(), ArchiveEntry.deleted_at.is_(None)).one_or_none()
 
+    def get_by_relative_path(self, db: Session, library_id: str, relative_path: str) -> ArchiveEntry | None:
+        return (
+            db.query(ArchiveEntry)
+            .filter(
+                ArchiveEntry.library_id == library_id,
+                ArchiveEntry.relative_path == relative_path,
+                ArchiveEntry.deleted_at.is_(None),
+            )
+            .first()
+        )
+
+    def list_in_library(self, db: Session, library_id: str) -> list[ArchiveEntry]:
+        return db.query(ArchiveEntry).filter(ArchiveEntry.library_id == library_id, ArchiveEntry.deleted_at.is_(None)).all()
+
+    def count_in_library(self, db: Session, library_id: str) -> int:
+        return db.query(ArchiveEntry).filter(ArchiveEntry.library_id == library_id, ArchiveEntry.deleted_at.is_(None)).count()
+
     def list_all(self, db: Session) -> list[ArchiveEntry]:
         return db.query(ArchiveEntry).all()
 

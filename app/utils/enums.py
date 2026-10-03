@@ -8,6 +8,12 @@ class MetadataStatus(str, Enum):
     MANUAL = "MANUAL"
 
 
+class LibraryStatus(str, Enum):
+    ONLINE = "ONLINE"
+    # The folder is missing, unreadable, or empty while entries exist (an unplugged drive).
+    OFFLINE = "OFFLINE"
+
+
 class VerificationStatus(str, Enum):
     VERIFIED = "VERIFIED"
     MISSING = "MISSING"

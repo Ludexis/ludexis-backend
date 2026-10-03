@@ -1,3 +1,4 @@
+from datetime import datetime
 from pydantic import BaseModel
 
 from app.schemas.base import TimestampedModel
@@ -42,6 +43,10 @@ class LibraryUpdate(BaseModel):
 
 class LibraryRead(LibraryBase, TimestampedModel):
     id: str
+    status: str = "ONLINE"
+    last_seen_at: datetime | None = None
+    last_scan_at: datetime | None = None
+    last_error: str | None = None
 
     model_config = {
         "from_attributes": True,

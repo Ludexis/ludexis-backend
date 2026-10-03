@@ -138,6 +138,9 @@ class ArchiveEntryRead(ArchiveEntryBase, TimestampedModel):
     related_entries: list[ArchiveEntryReference] = []
 
     group_key: str | None = None
+    relative_path: str | None = None
+    library_id: str | None = None
+    library_status: str | None = None
     episode: int | None = None
     season: int | None = None
     is_primary_version: bool = True

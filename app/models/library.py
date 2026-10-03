@@ -34,6 +34,11 @@ class Library(Base):
         default=True,
     )
 
+    status: str = mapped_column(sa.String(16), nullable=False, default="ONLINE", server_default="ONLINE")
+    last_seen_at = mapped_column(sa.DateTime(timezone=True), nullable=True)
+    last_scan_at = mapped_column(sa.DateTime(timezone=True), nullable=True)
+    last_error: str = mapped_column(sa.Text, nullable=True)
+
     created_at = mapped_column(
         sa.DateTime(timezone=True),
         server_default=sa.func.now(),

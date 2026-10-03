@@ -76,8 +76,9 @@ def run_job(task, job_history_id: str, label: str, work: JobWork) -> str:
 
 
 def summarize(stats: dict) -> dict:
+    # Id lists are too long for a summary; short name lists such as offline libraries stay.
     return {
         key: value
         for key, value in stats.items()
-        if key != "cancelled" and not isinstance(value, (list, dict))
+        if key not in ("cancelled", "ids") and not key.endswith("_ids") and not isinstance(value, dict) and value != []
     }
