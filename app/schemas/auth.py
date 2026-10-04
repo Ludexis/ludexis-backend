@@ -2,14 +2,12 @@ from pydantic import BaseModel, EmailStr
 
 
 class Token(BaseModel):
-    access_token: str
-    refresh_token: str
+    # Omitted when the browser refreshes through its cookie, so page scripts never see the tokens.
+    access_token: str | None = None
+    refresh_token: str | None = None
     token_type: str = "bearer"
-
-
-class MediaToken(BaseModel):
-    media_token: str
     expires_in: int
+    refresh_expires_in: int
 
 
 class TokenPayload(BaseModel):
@@ -34,7 +32,8 @@ class LoginRequest(BaseModel):
 
 
 class RefreshRequest(BaseModel):
-    refresh_token: str
+    # Optional: the browser sends its refresh cookie instead.
+    refresh_token: str | None = None
 
     model_config = {
         "json_schema_extra": {
@@ -48,7 +47,7 @@ class RefreshRequest(BaseModel):
 
 
 class LogoutRequest(BaseModel):
-    refresh_token: str
+    refresh_token: str | None = None
 
     model_config = {
         "json_schema_extra": {

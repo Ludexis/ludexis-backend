@@ -116,3 +116,41 @@ def no_celery_broker(monkeypatch):
         "apply_async",
         lambda self, *args, **kwargs: SimpleNamespace(id=f"test-task-{next(task_ids)}"),
     )
+
+
+class _MemoryRedis:
+    """Enough of Redis for the login rate limiter, fresh for every test."""
+
+    def __init__(self):
+        self.values = {}
+
+    def get(self, key):
+        return self.values.get(key)
+
+    def incr(self, key):
+        self.values[key] = int(self.values.get(key, 0)) + 1
+        return self.values[key]
+
+    def expire(self, key, seconds):
+        return True
+
+    def ttl(self, key):
+        return 900
+
+    def delete(self, key):
+        self.values.pop(key, None)
+
+
+@pytest.fixture(autouse=True)
+def isolated_login_limiter(monkeypatch):
+    from app.api import auth
+
+    monkeypatch.setattr(auth.login_limiter, "_client", _MemoryRedis())
+
+
+@pytest.fixture(autouse=True)
+def stateless_test_clients(monkeypatch):
+    # Login sets session cookies; tests authenticate explicitly, so clients must not carry them to later requests.
+    import httpx
+
+    monkeypatch.setattr(httpx.Client, "cookies", property(lambda self: httpx.Cookies(), lambda self, value: None))

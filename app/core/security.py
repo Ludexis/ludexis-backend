@@ -42,25 +42,6 @@ def create_refresh_token(subject: str) -> str:
     )
 
 
-def create_media_token(subject: str) -> str:
-    # Read-only token for /media URLs: <img> requests cannot send headers, so this token ends up in
-    # URLs and access logs, and must not grant API access.
-    expire = datetime.now(UTC) + timedelta(
-        minutes=settings.MEDIA_TOKEN_EXPIRE_MINUTES
-    )
-    payload = {
-        "sub": subject,
-        "type": "media",
-        "exp": expire,
-        "jti": str(uuid4()),
-    }
-    return jwt.encode(
-        payload,
-        settings.JWT_SECRET_KEY,
-        algorithm=settings.JWT_ALGORITHM,
-    )
-
-
 def verify_token(token: str, token_type: str = "access") -> str:
     payload = jwt.decode(token, settings.JWT_SECRET_KEY, algorithms=[settings.JWT_ALGORITHM])
     if payload.get("type") != token_type:
