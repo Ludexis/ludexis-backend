@@ -95,6 +95,7 @@ class SchedulerService:
         started = []
         now = now_local()
         jobs = JobService()
+        jobs.fail_stale_jobs(db)
         for task in self.list_tasks(db):
             if not task.enabled or (task.last_run_at and task.last_run_at >= last_occurrence(task, now)):
                 continue

@@ -4,8 +4,16 @@ from app.tasks.job_runner import JOB_TASK_OPTIONS, run_job
 
 
 @celery_app.task(**JOB_TASK_OPTIONS)
-def validate_artwork_task(self, job_history_id: str) -> str:
-    # Validates every entry's artwork and re-downloads missing or corrupt assets for provider-matched entries.
+def validate_artwork_task(self, job_history_id: str, mode: str = "validate") -> str:
+    # validate: check every entry's artwork and re-download missing or corrupt assets for provider-matched entries.
+    # fill: download whatever artwork is missing for every entry.
+    if mode == "fill":
+        return run_job(
+            self,
+            job_history_id,
+            "Artwork download",
+            lambda db, report, job_id: ArtworkService().auto_download_missing_artwork(db),
+        )
     return run_job(
         self,
         job_history_id,

@@ -147,6 +147,12 @@ def test_user_cannot_auto_download_artwork():
     assert response.status_code == 403, response.text
 
 
+def test_auto_download_queues_a_job():
+    response = client.post("/api/artwork/auto-download", headers=_auth_headers(admin_token()))
+    assert response.status_code == 202, response.text
+    assert response.json()["job_type"] == "ARTWORK_REFRESH"
+
+
 def test_user_can_list_missing_artwork():
     response = client.get(
         "/api/artwork/missing",

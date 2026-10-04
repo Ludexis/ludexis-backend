@@ -101,3 +101,27 @@ def test_settings_require_admin():
     token = client.post("/api/auth/login", json={"username": "testuser", "password": "Test123!"}).json()["access_token"]
     assert client.get("/api/admin/settings", headers={"Authorization": f"Bearer {token}"}).status_code == 403
 
+
+def test_stale_jobs_are_failed(db):
+    from app.services.job import JobService
+    from app.utils.enums import JobType
+
+    now = datetime.now(UTC)
+    fresh = JobHistory(job_type=JobType.LIBRARY_SCAN, status=JobStatus.RUNNING, started_at=now)
+    old_running = JobHistory(job_type=JobType.LIBRARY_SCAN, status=JobStatus.RUNNING, started_at=now - timedelta(hours=13))
+    old_pending = JobHistory(job_type=JobType.LIBRARY_SCAN, status=JobStatus.PENDING, started_at=now - timedelta(days=2))
+    queued = JobHistory(job_type=JobType.LIBRARY_SCAN, status=JobStatus.PENDING, started_at=now)
+    db.add_all([fresh, old_running, old_pending, queued])
+    db.commit()
+
+    JobService().fail_stale_jobs(db)
+    assert [job.status for job in (fresh, old_running, old_pending, queued)] == [
+        JobStatus.RUNNING, JobStatus.FAILED, JobStatus.FAILED, JobStatus.PENDING,
+    ]
+    assert old_running.result == "Worker stopped while the job was running"
+
+    # After a worker restart nothing can still be running.
+    JobService().fail_stale_jobs(db, worker_restarted=True)
+    assert (fresh.status, queued.status) == (JobStatus.FAILED, JobStatus.PENDING)
+    queued.status = JobStatus.CANCELED
+    db.commit()

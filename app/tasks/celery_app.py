@@ -1,6 +1,6 @@
 from celery import Celery
 from celery.schedules import crontab
-from celery.signals import setup_logging
+from celery.signals import setup_logging, worker_ready
 
 from app.core.config import settings
 from app.core.logging import setup_logging as configure_logging
@@ -41,3 +41,12 @@ celery_app.conf.beat_schedule = {
     },
 }
 
+
+@worker_ready.connect
+def fail_jobs_from_previous_worker(**kwargs) -> None:
+    # A job left RUNNING when this worker starts lost its worker; its message was already taken off the queue.
+    from app.db.session import SessionLocal
+    from app.services.job import JobService
+
+    with SessionLocal() as db:
+        JobService().fail_stale_jobs(db, worker_restarted=True)

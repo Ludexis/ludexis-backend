@@ -13,6 +13,9 @@ from app.services.artwork import ArtworkService
 from app.services.audit import AuditService
 from app.utils.audit_actions import AuditAction
 from app.utils.artwork import ArtworkType
+from app.utils.enums import JobType
+from app.schemas.job_history import JobHistoryRead
+from app.services.job import JobService
 
 router = APIRouter(prefix="/artwork", tags=["artwork"])
 service = ArtworkService()
@@ -112,13 +115,19 @@ def list_missing_artwork(
 
 @router.post(
     "/auto-download",
+    response_model=JobHistoryRead,
+    status_code=status.HTTP_202_ACCEPTED,
     summary="Auto download missing artwork",
-    description="Automatically download missing artwork for archive entries.",
+    description="Queue a background job that downloads missing artwork for every entry; returns the job.",
 )
 def auto_download_missing_artwork(
     current_user=Depends(require_permission(PermissionName.EDIT_METADATA)),
     db: Session = Depends(get_db),
 ):
-    result = service.auto_download_missing_artwork(db)
-    audit_service.record(db, current_user, AuditAction.AUTO_DOWNLOAD_ARTWORK, "Artwork", details=f"Auto download: {result}")
-    return result
+    jobs = JobService()
+    # Downloading can take minutes, so it runs as a job; a running artwork job is reused instead of doubled.
+    job = jobs.active_job(db, JobType.ARTWORK_REFRESH) or jobs.start_job(
+        db, current_user, JobType.ARTWORK_REFRESH, details="Download missing artwork", task_kwargs={"mode": "fill"},
+    )
+    audit_service.record(db, current_user, AuditAction.AUTO_DOWNLOAD_ARTWORK, "Artwork", details=f"job {job.id}")
+    return job

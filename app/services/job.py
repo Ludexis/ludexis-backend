@@ -1,4 +1,4 @@
-from datetime import datetime, UTC
+from datetime import datetime, timedelta, UTC
 
 from app.models.job_history import JobHistory
 from app.models.user import User
@@ -14,6 +14,11 @@ from app.tasks.artwork_tasks import validate_artwork_task
 from app.tasks.metadata_tasks import refresh_metadata_task
 from app.utils.enums import JobStatus, JobType
 from sqlalchemy.orm import Session
+
+
+# A job still RUNNING this long after it started, or never picked up from the queue, is treated as lost.
+STALE_RUNNING_AFTER = timedelta(hours=12)
+STALE_PENDING_AFTER = timedelta(hours=24)
 
 
 class JobService:
@@ -76,6 +81,25 @@ class JobService:
         job.details = "Canceled"
         job.completed_at = datetime.now(UTC)
         return self.repo.update(db, job, {"status": job.status, "details": job.details, "completed_at": job.completed_at})
+
+    def fail_stale_jobs(self, db: Session, worker_restarted: bool = False) -> int:
+        """Mark jobs whose worker died as FAILED so they stop showing as running and block nothing."""
+        now = datetime.now(UTC)
+        stale = []
+        for job in db.query(JobHistory).filter(JobHistory.status.in_([JobStatus.PENDING, JobStatus.RUNNING])):
+            age = now - job.started_at
+            if job.status == JobStatus.RUNNING and (worker_restarted or age > STALE_RUNNING_AFTER):
+                # assumes one worker; with several, a restart of one would fail the others' jobs.
+                stale.append((job, "Worker stopped while the job was running"))
+            elif job.status == JobStatus.PENDING and age > STALE_PENDING_AFTER:
+                stale.append((job, "Job was never picked up by a worker"))
+        for job, reason in stale:
+            job.status = JobStatus.FAILED
+            job.details = reason
+            job.result = reason
+            job.completed_at = now
+        db.commit()
+        return len(stale)
 
     def is_cancelled(self, db: Session, job_id: str,) -> bool:
         job = self.repo.get(db, job_id,)
