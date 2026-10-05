@@ -3,11 +3,14 @@ from collections import defaultdict
 from datetime import datetime, timezone
 from pathlib import Path
 
+from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
 
 from app.core.logging import get_logger
 from app.models.archive_entry import ArchiveEntry
+from app.models.association_tables import archive_entry_relations
 from app.models.collection import Collection
+from app.utils.enums import RelationshipType
 from app.utils.normalization import parse_archive_name, title_key
 
 logger = get_logger(__name__)
@@ -66,6 +69,7 @@ class GroupingService:
             for entry in members:
                 if entry not in collection.archive_entries:
                     collection.archive_entries.append(entry)
+            self._link_episodes(db, members)
             collections += 1
 
         db.commit()
@@ -75,6 +79,26 @@ class GroupingService:
         }
         logger.info("Regrouped library", extra=stats)
         return stats
+
+    def _link_episodes(self, db: Session, members: list[ArchiveEntry]) -> None:
+        # Each episode's primary version points at the next one (EPISODE), rebuilt so a new primary version takes over.
+        relations = archive_entry_relations.c
+        db.execute(
+            archive_entry_relations.delete().where(
+                relations.relationship_type == RelationshipType.EPISODE,
+                relations.source_entry_id.in_([entry.id for entry in members]),
+            )
+        )
+        episodes = sorted(
+            (entry for entry in members if entry.is_primary_version),
+            key=lambda entry: (entry.season or 0, entry.episode or 0),
+        )
+        rows = [
+            {"source_entry_id": current.id, "target_entry_id": following.id, "relationship_type": RelationshipType.EPISODE}
+            for current, following in zip(episodes, episodes[1:])
+        ]
+        if rows:
+            db.execute(insert(archive_entry_relations).values(rows).on_conflict_do_nothing())
 
     def siblings(self, db: Session, entry: ArchiveEntry) -> list[ArchiveEntry]:
         if not entry.group_key:

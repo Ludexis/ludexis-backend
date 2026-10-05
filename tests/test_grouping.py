@@ -1,13 +1,15 @@
 import uuid
 
 import pytest
+import sqlalchemy as sa
 
 from app.models.archive_entry import ArchiveEntry
+from app.models.association_tables import archive_entry_relations
 from app.models.collection import Collection
 from app.services.grouping import version_order
 from app.services.metadata import MetadataService
 from app.services.scanner import ScannerService
-from app.utils.enums import MetadataStatus
+from app.utils.enums import MetadataStatus, RelationshipType
 from tests.test_db import TestingSessionLocal
 
 
@@ -61,6 +63,15 @@ def test_episodes_gather_into_an_auto_collection(db, tmp_path):
     # A rescan reuses the collection instead of making another.
     ScannerService().scan_full(db, scan_root=str(tmp_path))
     assert db.query(Collection).filter(Collection.auto_key == entries[0].series_key).count() == 1
+
+    # Each episode points at the next one, and a rescan does not duplicate the links.
+    by_episode = {entry.episode: entry.id for entry in entries}
+    links = db.execute(
+        sa.select(archive_entry_relations.c.source_entry_id, archive_entry_relations.c.target_entry_id)
+        .where(archive_entry_relations.c.relationship_type == RelationshipType.EPISODE,
+               archive_entry_relations.c.source_entry_id.in_(by_episode.values()))
+    ).all()
+    assert sorted(links) == sorted([(by_episode[1], by_episode[2]), (by_episode[2], by_episode[3])])
 
 
 def test_versions_of_one_episode_are_not_a_series(db, tmp_path):

@@ -67,6 +67,9 @@ def test_missing_library_goes_offline_and_keeps_entries(db, tmp_path):
     assert library.status == "ONLINE"
     assert library.name in stats["reconnected_libraries"]
     assert len(entries_of(db, library)) == 2
+    # The returning library is verified at once, not at the next weekly integrity check.
+    assert stats["reconnect_missing"] == 0
+    assert stats["reconnect_verified"] + stats["reconnect_corrupted"] == 2
 
 
 def test_empty_root_with_entries_is_offline(db, tmp_path):

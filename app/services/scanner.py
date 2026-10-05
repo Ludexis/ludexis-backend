@@ -91,13 +91,13 @@ class ScannerService:
             return True
         return False
     
-    def verify_archives(self, db: Session, ) -> dict[str, int]:
+    def verify_archives(self, db: Session, library_id: str | None = None,) -> dict[str, int]:
         stats = {
             "verified": 0,
             "missing": 0,
             "corrupted": 0,
         }
-        archives = self.repo.list_all(db)
+        archives = self.repo.list_in_library(db, library_id) if library_id else self.repo.list_all(db)
         for archive in archives:
             # An unplugged drive must not turn its entries MISSING.
             if archive.library is not None and archive.library.status == LibraryStatus.OFFLINE:
@@ -205,6 +205,11 @@ class ScannerService:
                 stats["missing"] += self._mark_availability(db, library)
                 library.last_scan_at = datetime.now(timezone.utc)
         db.commit()
+        # A drive that was away may have come back with changed files, so its entries are checked right away.
+        for library, _, reconnected in batches:
+            if reconnected:
+                for outcome, count in self.verify_archives(db, library.id).items():
+                    stats[f"reconnect_{outcome}"] = stats.get(f"reconnect_{outcome}", 0) + count
         stats.update(GroupingService().regroup(db))
         logger.info(
             f"{label} completed",
