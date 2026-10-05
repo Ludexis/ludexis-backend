@@ -1,4 +1,5 @@
 from app.schemas.metadata import MetadataDetails
+from app.utils.normalization import company_key
 
 class MetadataConflictResolver:
     
@@ -92,45 +93,13 @@ class MetadataConflictResolver:
             set(primary) | set(secondary)
         )
 
-    def _normalize_company(
-        self,
-        name: str,
-    ) -> str:
-
-        name = name.strip()
-        replacements = {
-            "SEGA": "Sega",
-            "CREATIVE ASSEMBLY": "The Creative Assembly",
-            "Wube Software LTD.": "Wube Software",
-            "VALVE CORPORATION": "Valve",
-            "Valve Corporation": "Valve",
-        }
-
-        return replacements.get(
-            name,
-            name,
-        )
     def _merge_companies(
         self,
         primary: list[str],
         secondary: list[str],
     ) -> list[str]:
-
-        companies = {}
-
-        for company in (
-            primary + secondary
-        ):
-            normalized = (
-                self._normalize_company(
-                    company
-                )
-            )
-
-            companies[
-                normalized.lower()
-            ] = normalized
-
-        return sorted(
-            companies.values()
-        )
+        # The primary provider's spelling wins when both name the same company.
+        companies: dict[str, str] = {}
+        for company in primary + secondary:
+            companies.setdefault(company_key(company), company.strip())
+        return sorted(companies.values())

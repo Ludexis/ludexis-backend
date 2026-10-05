@@ -5,6 +5,7 @@ from app.models.archive_entry import ArchiveEntry
 from app.models.association_tables import archive_entry_publishers
 from app.models.publisher import Publisher
 from app.repositories.base import BaseRepository
+from app.utils.normalization import company_key
 
 
 class PublisherRepository(BaseRepository[Publisher]):
@@ -12,7 +13,7 @@ class PublisherRepository(BaseRepository[Publisher]):
         super().__init__(Publisher)
 
     def get_by_name(self, db: Session, name: str) -> Publisher | None:
-        return db.query(Publisher).filter(Publisher.name == name).one_or_none()
+        return db.query(Publisher).filter(Publisher.name_key == company_key(name)).one_or_none()
 
     def list_items(self, db: Session, offset: int = 0, limit: int = 100, q: str | None = None) -> list[Publisher]:
         query = db.query(Publisher)

@@ -94,6 +94,10 @@ def update_publisher(
     publisher = service.get(db, publisher_id)
     if publisher is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Publisher not found")
+    if data.name:
+        existing = service.repo.get_by_name(db, data.name)
+        if existing is not None and existing.id != publisher.id:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Publisher name already exists")
     updated = service.update(db, publisher, data)
     audit_service.record(
         db,

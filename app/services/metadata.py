@@ -85,43 +85,23 @@ class MetadataService:
                 genre
             )
 
-    def _sync_developers(self, db, archive, developers: list[str],):
-        archive.developers.clear()
-        for name in developers:
-            developer = (
-                self.developer_repo.get_by_name(
-                    db,
-                    name,
-                )
-            )
-            if developer is None:
-                developer = Developer(
-                    name=name,
-                )
-                db.add(developer)
+    def _sync_companies(self, db, links: list, repo, model, names: list[str],):
+        # Names resolve by company_key, so "SEGA" and "Sega" link the same record once.
+        links.clear()
+        for name in names:
+            company = repo.get_by_name(db, name)
+            if company is None:
+                company = model(name=name.strip()[:256])
+                db.add(company)
                 db.flush()
-            archive.developers.append(
-                developer
-            )
+            if company not in links:
+                links.append(company)
+
+    def _sync_developers(self, db, archive, developers: list[str],):
+        self._sync_companies(db, archive.developers, self.developer_repo, Developer, developers)
 
     def _sync_publishers(self, db, archive, publishers: list[str],):
-        archive.publishers.clear()
-        for name in publishers:
-            publisher = (
-                self.publisher_repo.get_by_name(
-                    db,
-                    name,
-                )
-            )
-            if publisher is None:
-                publisher = Publisher(
-                    name=name,
-                )
-                db.add(publisher)
-                db.flush()
-            archive.publishers.append(
-                publisher
-            )
+        self._sync_companies(db, archive.publishers, self.publisher_repo, Publisher, publishers)
 
     def _sync_tags(self, db, archive, tags: list[str],):
         # Only provider-imported tags are replaced, so tags a user added stay on the entry.

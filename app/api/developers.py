@@ -94,6 +94,10 @@ def update_developer(
     developer = service.get(db, developer_id)
     if developer is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Developer not found")
+    if data.name:
+        existing = service.repo.get_by_name(db, data.name)
+        if existing is not None and existing.id != developer.id:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Developer name already exists")
     updated = service.update(db, developer, data)
     audit_service.record(
         db,

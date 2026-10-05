@@ -69,6 +69,23 @@ def title_key(text: str) -> str:
     return "".join(re.findall(r"[a-z0-9]+", text.lower()))
 
 
+COMPANY_SUFFIXES = {
+    "ltd", "limited", "inc", "incorporated", "llc", "corp", "corporation", "co", "company",
+    "gmbh", "ag", "sa", "srl", "bv", "kk", "plc", "pty", "oy", "ab", "sro", "spa",
+}
+
+
+def company_key(name: str) -> str:
+    """Form two spellings of one company share: "SEGA"/"Sega", "The Creative Assembly"/"CREATIVE ASSEMBLY",
+    "Wube Software LTD."/"Wube Software"."""
+    words = re.findall(r"[a-z0-9]+", name.lower().replace("&", " and "))
+    if len(words) > 1 and words[0] == "the":
+        words = words[1:]
+    while len(words) > 1 and words[-1] in COMPANY_SUFFIXES:
+        words = words[:-1]
+    return "".join(words) or name.strip().lower()
+
+
 @dataclass
 class _Installment:
     episode: int | None = None
