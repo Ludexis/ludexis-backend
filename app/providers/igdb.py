@@ -29,7 +29,8 @@ class IGDBProvider(MetadataProvider):
         fields
             name,
             summary,
-            first_release_date;
+            first_release_date,
+            cover.url;
         limit {limit};
         """
 
@@ -58,6 +59,7 @@ class IGDBProvider(MetadataProvider):
                     summary=game.get("summary"),
                     release_date=release_date,
                     score=None,
+                    cover_url=("https:" + game["cover"]["url"].replace("t_thumb", "t_cover_small")) if game.get("cover", {}).get("url") else None,
                 )
             )
 

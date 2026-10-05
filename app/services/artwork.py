@@ -442,6 +442,15 @@ class ArtworkService:
                 )
         return downloaded
 
+    def replace_entries_artwork(self, db: Session, entry_ids: list[str], on_progress=None) -> dict:
+        downloaded = 0
+        entries = [entry for entry in (self.entry_repo.get_active(db, entry_id) for entry_id in entry_ids) if entry]
+        for index, entry in enumerate(entries, start=1):
+            downloaded += self.fill_missing_artwork(db, entry, repair=("cover", "banner", "logo", "screenshots"))
+            if on_progress:
+                on_progress(index, len(entries))
+        return {"entries": len(entries), "downloaded": downloaded}
+
     def auto_download_missing_artwork(self, db: Session,) -> dict:
         artwork_auto_download_runs_total.inc()
         downloaded = 0

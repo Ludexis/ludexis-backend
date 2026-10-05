@@ -1,7 +1,9 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
+from sqlalchemy.orm import Session
 
 from app.core.auth import get_current_active_user
 from app.core.dependencies import get_metadata_service
+from app.db.session import get_db
 from app.schemas.metadata import MetadataDetails, MetadataSearchResult
 from app.services.metadata import MetadataService
 
@@ -22,9 +24,17 @@ def search_metadata(
         description="Preferred provider order",
         examples=["igdb", "steam"],
     ),
+    provider: str | None = Query(
+        None,
+        description='Search only this provider, or "all" for every enabled provider; results include cover thumbnails.',
+        examples=["VNDB", "all"],
+    ),
     current_user=Depends(get_current_active_user),
     metadata_service: MetadataService = Depends(get_metadata_service),
+    db: Session = Depends(get_db),
 ):
+    if provider:
+        return metadata_service.search_providers(db, q, provider)
     return metadata_service.search(q, preferred_providers=provider_priority)
 
 

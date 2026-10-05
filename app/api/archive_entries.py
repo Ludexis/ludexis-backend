@@ -3,7 +3,9 @@ from sqlalchemy.orm import Session
 
 from app.core.auth import get_current_active_user, require_permission
 from app.db.session import get_db
-from app.schemas.archive_entry import ArchiveEntryCreate, ArchiveEntryRead, ArchiveEntryUpdate, ArchiveMetadataUpdate
+from app.schemas.archive_entry import (
+    ArchiveEntryCreate, ArchiveEntryRead, ArchiveEntryUpdate, ArchiveIdentifyRequest, ArchiveIdentifyResult, ArchiveMetadataUpdate,
+)
 from app.schemas.screenshot import ScreenshotRead
 from app.services.archive_entry import ArchiveEntryService
 from app.services.audit import AuditService
@@ -12,6 +14,10 @@ from app.services.scanner import ScannerService
 from app.schemas.duplicates import DuplicateGroup
 from app.repositories.screenshot import ScreenshotRepository
 from app.services.grouping import version_order
+from app.services.job import JobService
+from app.services.metadata import MetadataService
+from app.utils.audit_actions import AuditAction
+from app.utils.enums import JobType
 
 
 router = APIRouter(prefix="/archive-entries", tags=["archive_entries"])
@@ -205,6 +211,38 @@ def override_archive_metadata(
     )
 
     return updated
+
+@router.post(
+    "/{archive_entry_id}/identify",
+    response_model=ArchiveIdentifyResult,
+    summary="Identify archive entry",
+    description="Match the entry, and every unlocked version of the same game, to a chosen provider record. "
+    "Metadata is applied at once; fresh artwork is downloaded by the returned job.",
+    response_description="Archive entry identified.",
+)
+def identify_archive_entry(
+    archive_entry_id: str,
+    data: ArchiveIdentifyRequest,
+    current_user=Depends(require_permission(PermissionName.EDIT_METADATA)),
+    db: Session = Depends(get_db),
+):
+    entry = service.get(db, archive_entry_id)
+    if entry is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Archive entry not found")
+    updated = MetadataService().identify(db, entry, data.provider, data.provider_id)
+    if updated is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Provider record not found")
+    job = JobService().start_job(
+        db, current_user, JobType.ARTWORK_REFRESH, details=f"Replace artwork for {entry.title}",
+        task_kwargs={"mode": "replace", "entry_ids": [item.id for item in updated]},
+    )
+    audit_service.record(
+        db, current_user, AuditAction.IDENTIFY_ARCHIVE, "ArchiveEntry", entity_id=entry.id,
+        details=f"Identified {entry.title} as {data.provider} {data.provider_id}",
+    )
+    db.refresh(entry)
+    return {"entry": entry, "updated_entries": len(updated), "artwork_job": job}
+
 
 @router.delete(
     "/{archive_entry_id}",

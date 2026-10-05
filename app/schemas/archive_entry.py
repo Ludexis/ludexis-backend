@@ -5,6 +5,7 @@ from app.schemas.base import TimestampedModel
 from app.schemas.collection import CollectionRead
 from app.schemas.developer import DeveloperRead
 from app.schemas.franchise import FranchiseRead
+from app.schemas.job_history import JobHistoryRead
 from app.schemas.publisher import PublisherRead
 from app.schemas.tag import TagRead
 from app.utils.enums import MetadataStatus, VerificationStatus
@@ -125,6 +126,11 @@ class ArchiveMetadataUpdate(BaseModel):
     metadata_override: bool = True
 
 
+class ArchiveIdentifyRequest(BaseModel):
+    provider: str
+    provider_id: str
+
+
 class ArchiveEntryRead(ArchiveEntryBase, TimestampedModel):
     id: str
 
@@ -173,3 +179,9 @@ class ArchiveEntryRead(ArchiveEntryBase, TimestampedModel):
     model_config = {
         "from_attributes": True,
     }
+
+
+class ArchiveIdentifyResult(BaseModel):
+    entry: ArchiveEntryRead
+    updated_entries: int
+    artwork_job: JobHistoryRead

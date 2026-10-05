@@ -68,7 +68,7 @@ class VNDBProvider(MetadataProvider):
     def search(self, query: str, limit: int = 20) -> list[MetadataSearchResult]:
         results = self._query({
             "filters": ["search", "=", query],
-            "fields": "title, alttitle, released",
+            "fields": "title, alttitle, released, image.thumbnail",
             "results": min(limit, 100),
         })
         return [
@@ -77,6 +77,7 @@ class VNDBProvider(MetadataProvider):
                 provider_id=item["id"],
                 title=item["title"],
                 release_date=_parse_released(item.get("released")),
+                cover_url=(item.get("image") or {}).get("thumbnail"),
             )
             for item in results
         ]

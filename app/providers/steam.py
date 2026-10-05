@@ -37,6 +37,7 @@ class SteamProvider(MetadataProvider):
                     title=item["name"],
                     summary=None,
                     release_date=None,
+                    cover_url=item.get("tiny_image"),
                 )
             )
         return results

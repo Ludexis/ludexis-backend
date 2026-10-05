@@ -259,6 +259,36 @@ class MetadataService:
         )
         return results
 
+    def search_providers(self, db: Session, query: str, provider_name: str, limit: int = 10) -> list[MetadataSearchResult]:
+        # Interactive search: one named provider, or "all" enabled providers in their configured order.
+        metadata_searches_total.inc()
+        if provider_name.lower() == "all":
+            providers = self._match_providers(db)
+        else:
+            provider = self._get_provider(provider_name)
+            providers = [provider] if provider else []
+        return [result for provider in providers for result in self._search_provider(provider, query, limit)]
+
+    def identify(self, db: Session, archive: ArchiveEntry, provider_name: str, provider_id: str) -> list[ArchiveEntry] | None:
+        # A user-chosen match applies to every version of the game, except versions whose metadata is locked.
+        details = self.get_merged_details(archive.title, provider_name, provider_id, db)
+        if details is None:
+            return None
+        archive.metadata_override = False
+        targets = [archive] + [entry for entry in GroupingService().siblings(db, archive) if not entry.metadata_override]
+        for entry in targets:
+            entry.title = details.title
+            entry.metadata_source = details.provider
+            entry.metadata_source_code = details.provider_id
+            entry.metadata_status = MetadataStatus.MATCHED
+            entry.metadata_confidence = 1.0
+            self.refresh_archive(db, entry, details)
+        logger.info(
+            "Archive identified",
+            extra={"archive_id": archive.id, "provider": provider_name, "provider_id": provider_id, "entries": len(targets)},
+        )
+        return targets
+
     def _search_provider(self, provider: MetadataProvider, query: str, limit: int) -> list[MetadataSearchResult]:
         try:
             provider_results = provider.search(query, limit=limit)
@@ -322,7 +352,7 @@ class MetadataService:
         prioritized = [self.provider_map[name] for name in preferred_providers if name in self.provider_map]
         return prioritized + [provider for provider in self.providers if provider.name not in {p.name for p in prioritized}]
 
-    def refresh_archive(self, db: Session, archive: ArchiveEntry,) -> bool:
+    def refresh_archive(self, db: Session, archive: ArchiveEntry, details: MetadataDetails | None = None,) -> bool:
         logger.info(
             "Metadata refresh started",
             extra={
@@ -346,7 +376,7 @@ class MetadataService:
         ):
             return False
 
-        details = self.get_merged_details(
+        details = details or self.get_merged_details(
             archive.title,
             archive.metadata_source,
             archive.metadata_source_code,
