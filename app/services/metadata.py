@@ -350,6 +350,7 @@ class MetadataService:
             archive.title,
             archive.metadata_source,
             archive.metadata_source_code,
+            db,
         )
         if not details:
             return False
@@ -417,9 +418,10 @@ class MetadataService:
         title: str,
         provider_name: str | None = None,
         provider_id: str | None = None,
+        db: Session | None = None,
     ) -> MetadataDetails | None:
         if provider_id is None:
-            match, score = self.auto_match(title)
+            match, score = self.auto_match(title, db)
             if match is None or score < PARTIAL_THRESHOLD:
                 return None
             provider_name, provider_id = match.provider, match.provider_id
@@ -428,12 +430,36 @@ class MetadataService:
         if primary is None:
             return None
 
-        steam = self._get_provider("Steam")
-        steam_details = None
-        if steam is not None and provider_name != steam.name:
-            steam_results = steam.search(title, limit=1)
-            # Only merge a Steam record that is clearly the same game.
-            if steam_results and title_similarity(title, steam_results[0].title) >= MATCHED_THRESHOLD:
-                steam_details = steam.get_details(steam_results[0].provider_id)
+        # The other enabled providers fill what the primary lacks (a VNDB match gains IGDB franchises,
+        # genres and artwork, for example), but only from a record that is clearly the same game.
+        merged = primary
+        for provider in self._match_providers(db):
+            if provider.name == primary.provider:
+                continue
+            supplement = self._find_same_game(provider, primary, title)
+            if supplement is not None:
+                merged = self.conflict_resolver.resolve(merged, supplement)
+        return merged
 
-        return self.conflict_resolver.resolve(primary, steam_details)
+    def _find_same_game(self, provider: MetadataProvider, primary: MetadataDetails, title: str) -> MetadataDetails | None:
+        queries = list(dict.fromkeys([primary.title, title]))
+        candidate = next(
+            (
+                result
+                for query in queries
+                for result in self._search_provider(provider, query, limit=5)
+                if max(title_similarity(name, result.title) for name in queries) >= MATCHED_THRESHOLD
+            ),
+            None,
+        )
+        if candidate is None:
+            return None
+        try:
+            details = provider.get_details(candidate.provider_id)
+        except Exception:
+            logger.exception("Metadata supplement failed", extra={"provider": provider.name, "provider_id": candidate.provider_id})
+            return None
+        # Same name, different year: a remake or an unrelated game.
+        if details and primary.release_date and details.release_date and abs(primary.release_date.year - details.release_date.year) > 1:
+            return None
+        return details

@@ -1,7 +1,7 @@
 from pathlib import Path
 import requests
 from fastapi import UploadFile
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, object_session
 from PIL import Image
 import hashlib
 
@@ -41,6 +41,7 @@ class ArtworkService:
             entry.title,
             entry.metadata_source if entry.metadata_source_code else None,
             entry.metadata_source_code,
+            object_session(entry),
         )
 
     def _read_file(self, file: UploadFile) -> bytes:
