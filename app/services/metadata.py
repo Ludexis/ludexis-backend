@@ -4,7 +4,7 @@ from datetime import UTC, datetime
 from sqlalchemy.orm import Session
 from app.models.archive_entry import ArchiveEntry
 from app.utils.enums import MetadataStatus
-from app.providers import GOGProvider, IGDBProvider, ManualProvider, SteamProvider, VNDBProvider
+from app.providers import IGDBProvider, ManualProvider, SteamProvider, VNDBProvider
 from app.providers.metadata_provider import MetadataProvider
 from app.schemas.metadata import MetadataDetails, MetadataSearchResult
 from app.services.grouping import GroupingService
@@ -54,7 +54,6 @@ class MetadataService:
             VNDBProvider(),
             IGDBProvider(),
             SteamProvider(),
-            GOGProvider(),
             ManualProvider(),
         ]
         self.conflict_resolver = (MetadataConflictResolver())
