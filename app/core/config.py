@@ -1,8 +1,11 @@
 import json
+import os
+import secrets
+import time
 from pathlib import Path
 from typing import List
 
-from pydantic import PostgresDsn, RedisDsn, field_validator
+from pydantic import PostgresDsn, RedisDsn, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 class Settings(BaseSettings):
@@ -37,7 +40,9 @@ class Settings(BaseSettings):
         "image/gif",
     ]
 
-    JWT_SECRET_KEY: str
+    # Left empty, a random secret is generated once and kept in CONFIG_DIR, shared by every container.
+    JWT_SECRET_KEY: str = ""
+    CONFIG_DIR: str = "./config"
     JWT_ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 15
     REFRESH_TOKEN_EXPIRE_DAYS: int = 30
@@ -46,13 +51,14 @@ class Settings(BaseSettings):
 
     CORS_ORIGINS: str = "http://localhost:3000,http://127.0.0.1:3000"
 
-    @field_validator("JWT_SECRET_KEY")
-    @classmethod
-    def _require_strong_jwt_secret(cls, value: str) -> str:
+    @model_validator(mode="after")
+    def _jwt_secret(self) -> "Settings":
+        if not self.JWT_SECRET_KEY:
+            self.JWT_SECRET_KEY = _load_or_create_secret(Path(self.CONFIG_DIR) / "jwt_secret")
         # Placeholders such as CHANGE_ME would let anyone forge tokens.
-        if len(value) < 32:
+        elif len(self.JWT_SECRET_KEY) < 32:
             raise ValueError("JWT_SECRET_KEY must be at least 32 characters (generate one with: openssl rand -hex 32)")
-        return value
+        return self
 
     @property
     def cors_origins_list(self) -> List[str]:
@@ -63,6 +69,24 @@ class Settings(BaseSettings):
             except json.JSONDecodeError:
                 pass
         return [origin.strip() for origin in value.split(",") if origin.strip()]
+
+
+def _load_or_create_secret(path: Path) -> str:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        # O_EXCL: when backend, worker and beat start together, exactly one of them writes the secret.
+        fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    except FileExistsError:
+        for _ in range(50):
+            value = path.read_text(encoding="utf-8").strip()
+            if len(value) >= 32:
+                return value
+            time.sleep(0.1)
+        raise RuntimeError(f"{path} exists but holds no usable secret; delete it to generate a new one")
+    value = secrets.token_hex(32)
+    with os.fdopen(fd, "w", encoding="utf-8") as file:
+        file.write(value)
+    return value
 
 
 settings = Settings()
