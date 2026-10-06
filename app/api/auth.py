@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 from app.core.auth import (
     REFRESH_COOKIE,
     clear_auth_cookies,
+    get_current_active_user,
     get_current_user,
     require_csrf_header,
     set_auth_cookies,
@@ -14,7 +15,8 @@ from app.core.config import settings
 from app.core.rate_limit import LoginRateLimiter
 from app.db.session import get_db
 from app.repositories.refresh_token import RefreshTokenRepository
-from app.schemas.auth import LoginRequest, LogoutRequest, RefreshRequest, Token
+from app.models.user import User
+from app.schemas.auth import ChangePasswordRequest, LoginRequest, LogoutRequest, RefreshRequest, Token
 from app.schemas.user import UserRead
 from app.services.audit import AuditService
 from app.services.auth import AuthService
@@ -148,6 +150,60 @@ def logout(request: Request, response: Response, data: LogoutRequest | None = No
             user_id=token_record.user_id,
             details="User logged out",
         )
+
+
+@router.post(
+    "/change-password",
+    response_model=Token,
+    summary="Change own password",
+    description="Change the signed-in user's password. Every other session is signed out; this one gets new tokens.",
+    response_description="Password changed.",
+)
+def change_password(
+    data: ChangePasswordRequest,
+    request: Request,
+    response: Response,
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
+):
+    address = request.client.host if request.client else "unknown"
+    # Guessing the current password from a hijacked session is limited like sign-in.
+    retry_after = login_limiter.retry_after(current_user.username, address)
+    if retry_after:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="Too many failed attempts. Try again later.",
+            headers={"Retry-After": str(retry_after)},
+        )
+    if not auth_service.change_password(db, current_user, data.current_password, data.new_password):
+        login_limiter.record_failure(current_user.username, address)
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Current password is incorrect")
+    login_limiter.reset(current_user.username, address)
+    tokens = auth_service.create_tokens(db, current_user)
+    set_auth_cookies(request, response, tokens["access_token"], tokens["refresh_token"])
+    audit_log_service.log(
+        db, action=AuditAction.CHANGE_PASSWORD, entity="User", entity_id=current_user.id, user_id=current_user.id,
+        details="Password changed; other sessions signed out",
+    )
+    if request.headers.get("Authorization"):
+        return {**tokens, "token_type": "bearer", **_expiry()}
+    return {"token_type": "bearer", **_expiry()}
+
+
+@router.post(
+    "/logout-all",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Log out everywhere",
+    description="Sign the current user out of every session on every device, including this one.",
+    response_description="All sessions ended.",
+)
+def logout_all(response: Response, current_user: User = Depends(get_current_active_user), db: Session = Depends(get_db)):
+    auth_service.end_sessions(db, current_user)
+    clear_auth_cookies(response)
+    audit_log_service.log(
+        db, action=AuditAction.LOGOUT_ALL, entity="User", entity_id=current_user.id, user_id=current_user.id,
+        details="Signed out of every session",
+    )
 
 
 @router.get(

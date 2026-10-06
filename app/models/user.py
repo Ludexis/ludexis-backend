@@ -20,6 +20,8 @@ class User(Base):
     created_at = mapped_column(sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False)
     updated_at = mapped_column(sa.DateTime(timezone=True), server_default=sa.func.now(), onupdate=sa.func.now(), nullable=False)
     deleted_at = mapped_column(sa.DateTime(timezone=True), nullable=True)
+    # Access tokens issued before this moment are rejected (password change, "log out everywhere").
+    sessions_revoked_at = mapped_column(sa.DateTime(timezone=True), nullable=True)
 
     roles = relationship("Role", secondary=user_roles, backref="users")
     refresh_tokens = relationship("RefreshToken", back_populates="user", cascade="all, delete-orphan")

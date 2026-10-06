@@ -83,6 +83,20 @@ class AuthService:
         db.commit()
         return self.create_tokens(db, user)
 
+    def end_sessions(self, db: Session, user: User) -> None:
+        # Every refresh token is revoked and every access token issued so far stops working.
+        user.sessions_revoked_at = datetime.now(UTC)
+        db.query(RefreshToken).filter(RefreshToken.user_id == user.id, RefreshToken.revoked.is_(False)).update({"revoked": True})
+        db.commit()
+        logger.info("User sessions ended", extra={"user_id": user.id})
+
+    def change_password(self, db: Session, user: User, current_password: str, new_password: str) -> bool:
+        if not verify_password(current_password, user.hashed_password):
+            return False
+        user.hashed_password = hash_password(new_password)
+        self.end_sessions(db, user)
+        return True
+
     def logout(self, db: Session, refresh_token: str) -> None:
         token_record = self.refresh_repo.get_by_token(db, refresh_token)
         if token_record:

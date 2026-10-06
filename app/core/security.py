@@ -9,13 +9,16 @@ pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 
 def create_access_token(subject: str) -> str:
-    expire = datetime.now(UTC) + timedelta(
+    now = datetime.now(UTC)
+    expire = now + timedelta(
         minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES
     )
     payload = {
         "sub": subject,
         "type": "access",
         "exp": expire,
+        # Fractional (RFC 7519 allows it), so a token issued right after a revocation is told apart from one before it.
+        "iat": now.timestamp(),
         "jti": str(uuid4()),
     }
     return jwt.encode(
@@ -42,11 +45,15 @@ def create_refresh_token(subject: str) -> str:
     )
 
 
-def verify_token(token: str, token_type: str = "access") -> str:
+def token_payload(token: str, token_type: str = "access") -> dict:
     payload = jwt.decode(token, settings.JWT_SECRET_KEY, algorithms=[settings.JWT_ALGORITHM])
     if payload.get("type") != token_type:
         raise JWTError("Invalid token type")
-    return payload.get("sub")
+    return payload
+
+
+def verify_token(token: str, token_type: str = "access") -> str:
+    return token_payload(token, token_type).get("sub")
 
 
 def hash_password(password: str) -> str:

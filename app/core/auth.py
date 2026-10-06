@@ -6,7 +6,7 @@ from jose import JWTError
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
-from app.core.security import verify_token
+from app.core.security import token_payload
 from app.models.user import User
 from app.repositories.user import UserRepository
 from app.utils.enums import PermissionName
@@ -63,12 +63,14 @@ def clear_auth_cookies(response: Response) -> None:
 
 def _user_from_token(token: str, db: Session) -> User:
     try:
-        subject = verify_token(token, token_type="access")
+        payload = token_payload(token, token_type="access")
     except JWTError as exc:
         raise HTTPException(status_code=401, detail="Invalid authentication credentials") from exc
-    user = user_repo.get(db, subject)
+    user = user_repo.get(db, payload.get("sub"))
     if user is None or not user.is_active:
         raise HTTPException(status_code=401, detail="Inactive user")
+    if user.sessions_revoked_at and payload.get("iat", 0) < user.sessions_revoked_at.timestamp():
+        raise HTTPException(status_code=401, detail="Session ended")
     return user
 
 
