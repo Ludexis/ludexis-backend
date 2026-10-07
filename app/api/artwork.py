@@ -5,6 +5,7 @@ from app.core.auth import get_current_active_user, require_permission, Permissio
 from app.db.session import get_db
 from app.schemas.artwork import (
     ArtworkDeleteResponse,
+    ArtworkFromUrlRequest,
     ArtworkMissingResponse,
     ArtworkReplaceResponse,
     ArtworkUploadResponse,
@@ -68,6 +69,48 @@ def replace_artwork(
         return result
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+
+
+@router.get(
+    "/{archive_entry_id}/candidates",
+    response_model=list[str],
+    summary="List artwork candidates",
+    description="Image URLs the entry's matched metadata sources offer for one artwork slot.",
+    response_description="Candidate image URLs, best sources first.",
+)
+def list_artwork_candidates(
+    archive_entry_id: str,
+    artwork_type: ArtworkType = Query(..., description="Artwork type", examples=["banner"]),
+    current_user=Depends(require_permission(PermissionName.EDIT_METADATA)),
+    db: Session = Depends(get_db),
+):
+    try:
+        return service.artwork_candidates(db, archive_entry_id, artwork_type)
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+
+
+@router.post(
+    "/from-url",
+    response_model=ArtworkReplaceResponse,
+    summary="Set artwork from a candidate",
+    description="Download one of the offered candidate images into an artwork slot.",
+    response_description="Artwork set.",
+)
+def set_artwork_from_url(
+    data: ArtworkFromUrlRequest,
+    current_user=Depends(require_permission(PermissionName.EDIT_METADATA)),
+    db: Session = Depends(get_db),
+):
+    try:
+        result = service.set_artwork_from_url(db, data.archive_entry_id, data.artwork_type, data.url)
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    audit_service.record(
+        db, current_user, AuditAction.REPLACE_ARTWORK, "ArchiveEntry", data.archive_entry_id,
+        f"Set {data.artwork_type.value} artwork from a metadata source",
+    )
+    return result
 
 
 @router.delete(

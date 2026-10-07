@@ -27,6 +27,8 @@ from app.core.metrics import (
 
 logger = get_logger(__name__)
 
+SHAPE_BONUS = 1000
+
 
 class ArtworkService:
     def __init__(self, metadata_service: MetadataService | None = None) -> None:
@@ -122,30 +124,22 @@ class ArtworkService:
             score += 10
         return score
 
-    def _select_best_url(self, urls: list[str],) -> str | None:
-        if not urls:
-            return None
+    def _select_best_url(self, urls: list[str], shape: str | None = None, shape_only: list[str] | tuple = ()) -> str | None:
+        # shape "portrait" (covers) or "landscape" (banners) outweighs size and source, so a big
+        # landscape image never wins a cover slot over a smaller portrait one. URLs in shape_only
+        # are dropped unless they have the shape.
         best_url = None
         best_score = -1
-        for url in urls:
-            score = (
-                self._score_artwork_candidate(
-                    url
-                )
-            )
+        for url in dict.fromkeys(urls):
+            score = self._score_artwork_candidate(url)
             try:
-                contents, _ = (
-                    self._download_artwork_url(
-                        url
-                    )
-                )
-                score += (
-                    self._score_image(
-                        contents
-                    )
-                )
+                contents, _ = self._download_artwork_url(url)
+                image_score = self._score_image(contents, shape)
             except Exception:
-                pass
+                image_score = 0
+            if url in shape_only and image_score < SHAPE_BONUS:
+                continue
+            score += image_score
             if score > best_score:
                 best_score = score
                 best_url = url
@@ -178,9 +172,7 @@ class ArtworkService:
             return False
 
         artwork_url = (
-            self._select_best_url(
-                details.cover_urls
-            )
+            self._select_best_url(details.cover_urls, "portrait")
         )
         if artwork_url is None:
             return False
@@ -244,17 +236,11 @@ class ArtworkService:
         ):
             return True
         details = details or self._entry_details(entry)
-        if (
-            details is None
-            or
-            not details.banner_urls
-        ):
+        if details is None:
             return False
-        artwork_url = (
-            self._select_best_url(
-                details.banner_urls
-            )
-        )
+        # A landscape "cover" (common on VNDB) is usually the game's key art and makes a better banner
+        # than a small store header, so cover candidates compete for the banner too.
+        artwork_url = self._select_best_url(details.banner_urls + details.cover_urls, "landscape", shape_only=details.cover_urls)
         if artwork_url is None:
             return False
         contents, extension = (
@@ -405,7 +391,7 @@ class ArtworkService:
         )
         return True
 
-    def fill_missing_artwork(self, db: Session, entry: ArchiveEntry, repair: list[str] | tuple[str, ...] = (),) -> int:
+    def fill_missing_artwork(self, db: Session, entry: ArchiveEntry, repair: list[str] | tuple[str, ...] = (), clear_unoffered: bool = False) -> int:
         # Provider details are fetched once and shared by every asset type that needs downloading.
         wanted = [
             kind for kind in ("cover", "banner", "logo")
@@ -429,6 +415,11 @@ class ArtworkService:
             try:
                 if downloaders[kind](db, entry.id, force=True, details=details):
                     downloaded += 1
+                elif clear_unoffered and kind != "screenshots" and getattr(entry, f"{kind}_path"):
+                    # The new match has no image for this slot; the old one belongs to whatever was matched before.
+                    self.storage.delete(getattr(entry, f"{kind}_path"))
+                    setattr(entry, f"{kind}_path", None)
+                    db.commit()
             except Exception:
                 db.rollback()
                 artwork_validation_failures_total.inc()
@@ -446,7 +437,7 @@ class ArtworkService:
         downloaded = 0
         entries = [entry for entry in (self.entry_repo.get_active(db, entry_id) for entry_id in entry_ids) if entry]
         for index, entry in enumerate(entries, start=1):
-            downloaded += self.fill_missing_artwork(db, entry, repair=("cover", "banner", "logo", "screenshots"))
+            downloaded += self.fill_missing_artwork(db, entry, repair=("cover", "banner", "logo", "screenshots"), clear_unoffered=True)
             if on_progress:
                 on_progress(index, len(entries))
         return {"entries": len(entries), "downloaded": downloaded}
@@ -575,6 +566,41 @@ class ArtworkService:
             "screenshot_id": None,
             "caption": None,
         }
+
+    def artwork_candidates(self, db: Session, archive_entry_id: str, artwork_type: ArtworkType) -> list[str]:
+        """Images the entry's matched sources offer for one slot, for the user to choose from."""
+        entry = self.entry_repo.get_active(db, archive_entry_id)
+        if entry is None:
+            raise ValueError("Archive entry not found")
+        details = self._entry_details(entry)
+        if details is None:
+            return []
+        candidates = {
+            ArtworkType.COVER: details.cover_urls,
+            # Wide key art often sits among covers (VNDB) or screenshots, so a banner may come from either.
+            ArtworkType.BANNER: details.banner_urls + details.cover_urls + details.artwork_urls,
+            ArtworkType.LOGO: details.logo_urls,
+        }.get(artwork_type, [])
+        return list(dict.fromkeys(candidates))
+
+    def set_artwork_from_url(self, db: Session, archive_entry_id: str, artwork_type: ArtworkType, url: str) -> dict[str, str | None]:
+        # Only an offered candidate is fetched, so the server never downloads an arbitrary URL.
+        if artwork_type == ArtworkType.SCREENSHOT or url not in self.artwork_candidates(db, archive_entry_id, artwork_type):
+            raise ValueError("That image is not offered for this game")
+        entry = self.entry_repo.get_active(db, archive_entry_id)
+        try:
+            contents, extension = self._download_artwork_url(url)
+        except requests.RequestException as exc:
+            raise ValueError("The image could not be downloaded") from exc
+        asset_field = f"{artwork_type.value}_path"
+        existing_path = getattr(entry, asset_field, None)
+        stored_path = self.storage.save(build_artwork_relative_path(entry.id, artwork_type, f"art{extension}"), contents)
+        if existing_path and existing_path != stored_path:
+            self.storage.delete(existing_path)
+        setattr(entry, asset_field, stored_path)
+        db.add(entry)
+        db.commit()
+        return {"archive_entry_id": entry.id, "artwork_type": artwork_type.value, "file_path": stored_path, "screenshot_id": None, "caption": None}
 
     def delete_artwork(
         self,
@@ -731,23 +757,21 @@ class ArtworkService:
             "failed": failed,
         }
 
-    def _score_image(self, contents: bytes, ) -> int:
+    def _score_image(self, contents: bytes, shape: str | None = None) -> int:
         score = 0
         try:
             from io import BytesIO
-            with Image.open(
-                BytesIO(contents)
-            ) as image:
-                width, height = (
-                    image.size
-                )
-                score += (
-                    width * height
-                ) // 10000
+            with Image.open(BytesIO(contents)) as image:
+                width, height = image.size
+                score += (width * height) // 10000
                 if width >= 1000:
                     score += 50
                 if height >= 500:
                     score += 50
+                if shape == "portrait" and height > width:
+                    score += SHAPE_BONUS
+                if shape == "landscape" and width >= 1.6 * height:
+                    score += SHAPE_BONUS
         except Exception:
             return 0
         return score

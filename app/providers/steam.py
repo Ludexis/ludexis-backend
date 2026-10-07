@@ -96,6 +96,10 @@ class SteamProvider(MetadataProvider):
             if screenshot.get("path_full")
         )
 
+        # The library hero is the wide key art behind a game in the Steam client, far larger than the store header.
+        banner_urls.append(
+            f"https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/{external_id}/library_hero.jpg"
+        )
         header = data.get(
             "header_image"
         )

@@ -189,3 +189,37 @@ def test_media_requires_a_session():
         assert client.get(f"/media/{name}", headers={"Authorization": f"Bearer {access_token}"}).status_code == 200
     finally:
         (media_dir / name).unlink()
+
+
+def test_artwork_candidates_and_set_from_url():
+    from unittest.mock import patch
+
+    from app.schemas.metadata import MetadataDetails
+    from app.services.artwork import ArtworkService
+
+    token = admin_token()
+    entry_id = _create_entry(token)
+    details = MetadataDetails(
+        provider="Steam", provider_id="1", title="x",
+        cover_urls=["https://img.example/cover.jpg"], banner_urls=["https://img.example/hero.jpg"],
+        artwork_urls=["https://img.example/shot.jpg"],
+    )
+    with patch.object(ArtworkService, "_entry_details", return_value=details), \
+            patch.object(ArtworkService, "_download_artwork_url", return_value=(PNG_BYTES, ".png")):
+        banners = client.get(f"/api/artwork/{entry_id}/candidates", headers=_auth_headers(token), params={"artwork_type": "banner"})
+        assert banners.json() == ["https://img.example/hero.jpg", "https://img.example/cover.jpg", "https://img.example/shot.jpg"]
+
+        chosen = client.post("/api/artwork/from-url", headers=_auth_headers(token), json={
+            "archive_entry_id": entry_id, "artwork_type": "banner", "url": "https://img.example/shot.jpg",
+        })
+        assert chosen.status_code == 200, chosen.text
+        assert chosen.json()["file_path"].endswith(".png")
+
+        # Anything not offered for this game is refused rather than fetched.
+        refused = client.post("/api/artwork/from-url", headers=_auth_headers(token), json={
+            "archive_entry_id": entry_id, "artwork_type": "banner", "url": "http://169.254.169.254/latest",
+        })
+        assert refused.status_code == 400
+
+    entry = client.get(f"/api/archive-entries/{entry_id}", headers=_auth_headers(token)).json()
+    assert entry["banner_path"] == chosen.json()["file_path"]

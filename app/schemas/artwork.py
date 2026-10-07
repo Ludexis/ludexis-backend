@@ -33,3 +33,9 @@ class ArtworkValidationResult(BaseModel):
     title: str
     verification_status: str
     missing_types: list[ArtworkType]
+
+
+class ArtworkFromUrlRequest(BaseModel):
+    archive_entry_id: str
+    artwork_type: ArtworkType
+    url: str

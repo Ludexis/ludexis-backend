@@ -44,7 +44,10 @@ def test_search_parses_results():
 def test_details_filter_tags_and_strip_markup():
     tags = [{"name": f"Tag {i}", "rating": 3.0 - i * 0.05, "spoiler": 0} for i in range(20)]
     tags += [{"name": "Spoiler", "rating": 3.0, "spoiler": 2}, {"name": "Weak", "rating": 1.0, "spoiler": 0}]
-    with patch("app.providers.vndb.requests.post", return_value=response([{
+    releases = response([
+        {"images": [{"type": "pkgback", "url": "https://t.vndb.org/back.jpg"}, {"type": "pkgfront", "url": "https://t.vndb.org/front.jpg"}]},
+    ])
+    with patch("app.providers.vndb.requests.post", side_effect=[response([{
         "id": "v100",
         "title": "Quiet Meadow",
         "description": "A [url=https://example.com]small[/url] [b]story[/b].",
@@ -53,14 +56,16 @@ def test_details_filter_tags_and_strip_markup():
         "tags": tags,
         "image": {"url": "https://t.vndb.org/cv/00/100.jpg"},
         "screenshots": [{"url": "https://t.vndb.org/sf/00/1.jpg"}],
-    }])):
+    }]), releases]) as post:
         details = VNDBProvider().get_details("v100")
 
     assert details.description == "A small story."
     assert details.release_date is None
     assert details.developers == ["Pond Works"]
     assert details.tags == [f"Tag {i}" for i in range(15)]
-    assert details.cover_urls == ["https://t.vndb.org/cv/00/100.jpg"]
+    # Release package fronts come first: the main image is often a landscape banner.
+    assert details.cover_urls == ["https://t.vndb.org/front.jpg", "https://t.vndb.org/cv/00/100.jpg"]
+    assert post.call_args.args[0].endswith("/release")
     assert details.artwork_urls == ["https://t.vndb.org/sf/00/1.jpg"]
 
 

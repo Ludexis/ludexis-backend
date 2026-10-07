@@ -17,6 +17,8 @@ MIN_INTERVAL_SECONDS = 1.5
 # waiting on a timeout for every entry.
 BACKOFF_SECONDS = 600
 TAG_LIMIT = 15
+COVER_IMAGE_TYPES = {"pkgfront", "dig"}
+MAX_RELEASE_COVERS = 4
 MIN_TAG_RATING = 2.0
 DETAIL_FIELDS = (
     "title, description, released, developers.name, tags.name, tags.rating, tags.spoiler, "
@@ -41,13 +43,13 @@ def _strip_markup(text: str | None) -> str | None:
 class VNDBProvider(MetadataProvider):
     name = "VNDB"
     priority = 5
-    API_URL = "https://api.vndb.org/kana/vn"
+    API_URL = "https://api.vndb.org/kana"
 
     _lock = threading.Lock()
     _last_request = 0.0
     _down_until = 0.0
 
-    def _query(self, payload: dict) -> list[dict]:
+    def _query(self, payload: dict, endpoint: str = "vn") -> list[dict]:
         cls = type(self)
         if time.monotonic() < cls._down_until:
             return []
@@ -57,7 +59,7 @@ class VNDBProvider(MetadataProvider):
                 time.sleep(wait)
             cls._last_request = time.monotonic()
         try:
-            response = requests.post(self.API_URL, json=payload, timeout=(5, 20))
+            response = requests.post(f"{self.API_URL}/{endpoint}", json=payload, timeout=(5, 20))
         except requests.ConnectionError:
             cls._down_until = time.monotonic() + BACKOFF_SECONDS
             logger.warning("VNDB unreachable, skipping it for a while", extra={"backoff_seconds": BACKOFF_SECONDS})
@@ -93,6 +95,16 @@ class VNDBProvider(MetadataProvider):
             reverse=True,
         )
         image = vn.get("image") or {}
+        # A VN's main image is often a landscape banner; its releases' package fronts are true covers.
+        fronts = [
+            release_image["url"]
+            for release in self._query(
+                {"filters": ["vn", "=", ["id", "=", external_id]], "fields": "images.url, images.type", "results": 25},
+                "release",
+            )
+            for release_image in release.get("images", [])
+            if release_image.get("type") in COVER_IMAGE_TYPES and release_image.get("url")
+        ]
         return MetadataDetails(
             provider=self.name,
             provider_id=vn["id"],
@@ -101,7 +113,7 @@ class VNDBProvider(MetadataProvider):
             release_date=_parse_released(vn.get("released")),
             developers=[developer["name"] for developer in vn.get("developers", []) if developer.get("name")],
             tags=[tag["name"] for tag in tags[:TAG_LIMIT]],
-            cover_urls=[image["url"]] if image.get("url") else [],
+            cover_urls=list(dict.fromkeys(fronts[:MAX_RELEASE_COVERS] + ([image["url"]] if image.get("url") else []))),
             artwork_urls=[shot["url"] for shot in vn.get("screenshots", []) if shot.get("url")],
         )
 
