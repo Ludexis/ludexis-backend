@@ -65,3 +65,53 @@ def test_replacing_artwork_drops_a_slot_the_new_match_does_not_offer():
     assert entry.banner_path is None
     db.close()
 
+
+def test_steamgriddb_art_is_added_for_the_same_game_only():
+    from datetime import date
+    from unittest.mock import MagicMock, patch
+
+    from app.schemas.metadata import MetadataDetails
+
+    def reply(data):
+        response = MagicMock(status_code=200)
+        response.json.return_value = {"success": True, "data": data}
+        return response
+
+    def fake_get(url, **kwargs):
+        if "/search/autocomplete/" in url:
+            return reply([
+                {"id": 1, "name": "Quiet Meadow 2", "release_date": 1609459200},
+                {"id": 2, "name": "Quiet Meadow", "release_date": 946684800},  # 2000: another game
+                {"id": 4, "name": "Quiet Meadow", "release_date": 1672531200},  # 2023: close, but not closest
+                {"id": 3, "name": "Quiet Meadow", "release_date": 1609459200},  # 2021
+            ])
+        game_id = url.split("/game/")[1]
+        kind = url.split("/v2/")[1].split("/")[0]
+        return reply([{"url": f"https://grid.example/{kind}-{game_id}.png"}])
+
+    details = MetadataDetails(provider="VNDB", provider_id="v1", title="Quiet Meadow", release_date=date(2021, 5, 4),
+                              cover_urls=["https://vndb.example/cover.jpg"])
+    with patch("app.services.artwork.SettingsService.steamgriddb_key", return_value="key"), \
+            patch("app.providers.steamgriddb.requests.get", side_effect=fake_get) as get:
+        ArtworkService()._add_steamgriddb_art(None, details)
+
+    assert details.cover_urls == ["https://vndb.example/cover.jpg", "https://grid.example/grids-3.png"]
+    assert details.banner_urls == ["https://grid.example/heroes-3.png"]
+    assert details.logo_urls == ["https://grid.example/logos-3.png"]
+    assert get.call_args.kwargs["headers"] == {"Authorization": "Bearer key"}
+
+
+def test_steamgriddb_skips_a_same_named_game_from_years_apart():
+    from datetime import date
+    from unittest.mock import MagicMock, patch
+
+    from app.schemas.metadata import MetadataDetails
+
+    response = MagicMock(status_code=200)
+    response.json.return_value = {"data": [{"id": 2, "name": "Quiet Meadow", "release_date": 946684800}]}
+    details = MetadataDetails(provider="VNDB", provider_id="v1", title="Quiet Meadow", release_date=date(2021, 5, 4))
+    with patch("app.services.artwork.SettingsService.steamgriddb_key", return_value="key"),             patch("app.providers.steamgriddb.requests.get", return_value=response) as get:
+        ArtworkService()._add_steamgriddb_art(None, details)
+
+    assert get.call_count == 1
+    assert details.cover_urls == []

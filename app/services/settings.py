@@ -9,6 +9,7 @@ DEFAULTS = {
     "provider_order": ["VNDB", "IGDB", "Steam"],
     "igdb_client_id": "",
     "igdb_client_secret": "",
+    "steamgriddb_api_key": "",
 }
 MATCH_PROVIDERS = ["VNDB", "IGDB", "Steam"]
 
@@ -32,6 +33,9 @@ class SettingsService:
             return env.TWITCH_CLIENT_ID, env.TWITCH_CLIENT_SECRET
         return self.get(db, "igdb_client_id"), self.get(db, "igdb_client_secret")
 
+    def steamgriddb_key(self, db: Session) -> str:
+        return env.STEAMGRIDDB_API_KEY or self.get(db, "steamgriddb_api_key")
+
     def public(self, db: Session) -> dict:
         client_id, client_secret = self.igdb_credentials(db)
         return {
@@ -41,4 +45,6 @@ class SettingsService:
             "igdb_client_id": client_id,
             "igdb_configured": bool(client_id and client_secret),
             "igdb_from_env": bool(env.TWITCH_CLIENT_ID and env.TWITCH_CLIENT_SECRET),
+            "steamgriddb_configured": bool(self.steamgriddb_key(db)),
+            "steamgriddb_from_env": bool(env.STEAMGRIDDB_API_KEY),
         }

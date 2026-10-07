@@ -83,17 +83,21 @@ def test_settings_round_trip_hides_secret(db):
         "provider_order": ["IGDB", "VNDB", "IGDB"],
         "igdb_client_id": "client-123",
         "igdb_client_secret": "very-secret",
+        "steamgriddb_api_key": "grid-secret",
     }, headers=headers)
     assert response.status_code == 200
     body = response.json()
     assert body["server_name"] == "Basement Shelf"
     assert body["provider_order"] == ["IGDB", "VNDB"]
     assert body["igdb_configured"] is True
+    assert body["steamgriddb_configured"] is True
     assert "very-secret" not in response.text
+    assert "grid-secret" not in response.text
 
     assert client.patch("/api/admin/settings", json={"provider_order": ["Nope"]}, headers=headers).status_code == 422
     client.patch("/api/admin/settings", json={
         "server_name": "Ludexis", "provider_order": ["VNDB", "IGDB", "Steam"], "igdb_client_id": "", "igdb_client_secret": "",
+        "steamgriddb_api_key": "",
     }, headers=headers)
 
 

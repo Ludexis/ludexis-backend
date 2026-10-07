@@ -13,6 +13,9 @@ from app.repositories.screenshot import ScreenshotRepository
 from app.services.storage import StorageService
 from app.schemas.metadata import MetadataDetails
 from app.services.metadata import MetadataService
+from app.services.settings import SettingsService
+from app.providers.steamgriddb import SteamGridDBClient
+from app.utils.normalization import title_key
 from app.utils.artwork import ArtworkType, build_artwork_relative_path, is_allowed_artwork_mime_type
 from app.utils.enums import MetadataStatus
 from app.models.screenshot import Screenshot
@@ -28,6 +31,8 @@ from app.core.metrics import (
 logger = get_logger(__name__)
 
 SHAPE_BONUS = 1000
+# Most years a SteamGridDB game may differ from the matched record's release date.
+MAX_YEAR_GAP = 2
 
 
 class ArtworkService:
@@ -39,12 +44,37 @@ class ArtworkService:
 
     def _entry_details(self, entry: ArchiveEntry) -> MetadataDetails | None:
         # Prefer the stored provider match; fall back to a title search only for entries without one.
-        return self.metadata_service.get_merged_details(
+        db = object_session(entry)
+        details = self.metadata_service.get_merged_details(
             entry.title,
             entry.metadata_source if entry.metadata_source_code else None,
             entry.metadata_source_code,
-            object_session(entry),
+            db,
         )
+        if details is not None and db is not None:
+            self._add_steamgriddb_art(db, details)
+        return details
+
+    def _add_steamgriddb_art(self, db: Session, details: MetadataDetails) -> None:
+        # Community art is offered after the sources' own, so official art wins a tie; it matters most
+        # where no source has a portrait cover or a wide banner.
+        api_key = SettingsService().steamgriddb_key(db)
+        if not api_key:
+            return
+        client = SteamGridDBClient(api_key)
+        year = details.release_date.year if details.release_date else None
+        try:
+            same_name = [game for game in client.search(details.title) if title_key(game["name"]) == title_key(details.title)]
+            # Among same-named games the closest release year wins. Early-access games are dated by their
+            # launch on one site and their full release on another, hence the two-year allowance.
+            gap = lambda game: abs(year - game["year"]) if year and game["year"] else 0
+            game = min(same_name, key=gap, default=None)
+            if game is None or gap(game) > MAX_YEAR_GAP:
+                return
+            for field, urls in client.artwork(game["id"]).items():
+                setattr(details, field, getattr(details, field) + [url for url in urls if url not in getattr(details, field)])
+        except requests.RequestException:
+            logger.warning("SteamGridDB lookup failed", extra={"title": details.title})
 
     def _read_file(self, file: UploadFile) -> bytes:
         file.file.seek(0)

@@ -63,6 +63,7 @@ def update_settings(payload: SettingsUpdate, current_user=Depends(require_permis
         data["provider_order"] = list(dict.fromkeys(data["provider_order"]))
     for key, value in data.items():
         settings_service.set(db, key, value)
-    changed = sorted(key for key in data if key != "igdb_client_secret") + (["igdb_client_secret"] if "igdb_client_secret" in data else [])
+    # Secrets are named in the audit log, never their values (details only ever lists keys).
+    changed = sorted(data)
     audit_service.record(db, current_user, AuditAction.UPDATE_SETTINGS, "settings", details=", ".join(changed))
     return settings_service.public(db)

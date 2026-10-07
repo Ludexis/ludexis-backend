@@ -22,6 +22,7 @@ class Settings(BaseSettings):
 
     TWITCH_CLIENT_ID: str = ""
     TWITCH_CLIENT_SECRET: str = ""
+    STEAMGRIDDB_API_KEY: str = ""
 
     IGDB_TOKEN_URL: str = "https://id.twitch.tv/oauth2/token"
     IGDB_API_URL: str = "https://api.igdb.com/v4"

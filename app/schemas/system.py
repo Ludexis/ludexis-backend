@@ -32,6 +32,8 @@ class SettingsRead(BaseModel):
     igdb_client_id: str
     igdb_configured: bool
     igdb_from_env: bool
+    steamgriddb_configured: bool
+    steamgriddb_from_env: bool
 
 
 class SettingsUpdate(BaseModel):
@@ -40,3 +42,5 @@ class SettingsUpdate(BaseModel):
     igdb_client_id: str | None = None
     # Write-only: never returned by the API.
     igdb_client_secret: str | None = None
+    # Write-only: never returned by the API.
+    steamgriddb_api_key: str | None = None
