@@ -1,3 +1,5 @@
+from datetime import datetime
+
 from pydantic import BaseModel, EmailStr
 
 from app.schemas.role import RoleRead
@@ -54,6 +56,7 @@ class UserUpdate(BaseModel):
 class UserRead(UserBase):
     id: str
     roles: list[RoleRead] = []
+    created_at: datetime | None = None
 
     model_config = {
         "from_attributes": True,

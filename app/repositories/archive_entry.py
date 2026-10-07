@@ -63,23 +63,53 @@ class ArchiveEntryRepository(BaseRepository[ArchiveEntry]):
     def list_all(self, db: Session) -> list[ArchiveEntry]:
         return db.query(ArchiveEntry).all()
 
+    SORT_COLUMNS = {
+        "title": sa.func.lower(ArchiveEntry.title),
+        "created_at": ArchiveEntry.created_at,
+        "release_date": ArchiveEntry.release_date,
+        "file_size": ArchiveEntry.file_size,
+        # Home's "Rediscover" shelf; a fresh shuffle on every request.
+        "random": sa.func.random(),
+    }
+
     def search(
         self,
         db: Session,
+        sort: str = "title",
+        offset: int = 0,
+        limit: int = 100,
+        **filters,
+    ) -> list[ArchiveEntry]:
+        descending = sort.startswith("-")
+        column = self.SORT_COLUMNS[sort.lstrip("-")]
+        order = (column.desc() if descending else column.asc()).nulls_last()
+        return (
+            db.query(ArchiveEntry)
+            .filter(*self._search_filters(**filters))
+            .order_by(order, ArchiveEntry.id)
+            .offset(offset)
+            .limit(limit)
+            .all()
+        )
+
+    def count_search(self, db: Session, **filters) -> int:
+        return db.query(ArchiveEntry).filter(*self._search_filters(**filters)).count()
+
+    def _search_filters(
+        self,
         query: str | None = None,
         genre: str | None = None,
         tag: str | None = None,
         developer: str | None = None,
         publisher: str | None = None,
         collection: str | None = None,
+        collection_id: str | None = None,
         franchise: str | None = None,
         metadata_status: str | None = None,
         verification_status: str | None = None,
         storage_device: str | None = None,
         group_versions: bool = False,
-        offset: int = 0,
-        limit: int = 100,
-    ) -> list[ArchiveEntry]:
+    ) -> list:
         filters = [ArchiveEntry.deleted_at.is_(None)]
         if group_versions:
             filters.append(ArchiveEntry.is_primary_version.is_(True))
@@ -119,6 +149,9 @@ class ArchiveEntryRepository(BaseRepository[ArchiveEntry]):
         if collection:
             filters.append(ArchiveEntry.collections.any(Collection.name == collection))
 
+        if collection_id:
+            filters.append(ArchiveEntry.collections.any(Collection.id == collection_id))
+
         if franchise:
             filters.append(ArchiveEntry.franchise.has(Franchise.name == franchise))
 
@@ -131,13 +164,7 @@ class ArchiveEntryRepository(BaseRepository[ArchiveEntry]):
         if storage_device:
             filters.append(ArchiveEntry.storage_device.ilike(f"%{storage_device}%"))
 
-        return (
-            db.query(ArchiveEntry)
-            .filter(*filters)
-            .offset(offset)
-            .limit(limit)
-            .all()
-        )
+        return filters
     
     def get_all_by_hash(
         self,

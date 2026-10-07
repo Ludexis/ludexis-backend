@@ -1,5 +1,5 @@
 from datetime import date, datetime
-from pydantic import BaseModel, computed_field
+from pydantic import BaseModel, computed_field, field_validator
 
 from app.schemas.base import TimestampedModel
 from app.schemas.collection import CollectionRead
@@ -138,6 +138,7 @@ class ArchiveEntryRead(ArchiveEntryBase, TimestampedModel):
     developers: list[DeveloperRead] = []
     publishers: list[PublisherRead] = []
     collections: list[CollectionRead] = []
+    genres: list[str] = []
 
     franchise: FranchiseRead | None = None
     parent_series: ArchiveEntryReference | None = None
@@ -152,6 +153,11 @@ class ArchiveEntryRead(ArchiveEntryBase, TimestampedModel):
     is_primary_version: bool = True
     # Set by grouped listings: how many versions share this entry's group.
     version_count: int = 1
+
+    @field_validator("genres", mode="before")
+    @classmethod
+    def genre_names(cls, value):
+        return [getattr(genre, "name", genre) for genre in value or []]
 
     @computed_field
     @property
