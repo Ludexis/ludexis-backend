@@ -140,3 +140,17 @@ def test_merged_details_skip_a_same_name_game_from_another_year():
     service = MetadataService(providers=[CatalogProvider("VNDB", 5, [vn]), CatalogProvider("IGDB", 10, [remake])])
 
     assert service.get_merged_details("Quiet Meadow", "VNDB", "v1").franchises == []
+
+
+def test_merged_details_skip_a_same_name_game_by_other_developers():
+    from datetime import date
+
+    vn = MetadataDetails(provider="VNDB", provider_id="v1", title="Quiet Meadow", release_date=date(2021, 5, 4),
+                         developers=["Pond Works"])
+    other = MetadataDetails(provider="Steam", provider_id="9", title="Quiet Meadow", release_date=date(2021, 2, 1),
+                            developers=["Iron Forge Studio"], banner_urls=["other-banner"])
+    service = MetadataService(providers=[CatalogProvider("VNDB", 5, [vn]), CatalogProvider("Steam", 10, [other])])
+
+    merged = service.get_merged_details("Quiet Meadow", "VNDB", "v1")
+    assert merged.banner_urls == []
+    assert merged.developers == ["Pond Works"]

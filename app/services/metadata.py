@@ -8,6 +8,7 @@ from app.providers import IGDBProvider, ManualProvider, SteamProvider, VNDBProvi
 from app.providers.metadata_provider import MetadataProvider
 from app.schemas.metadata import MetadataDetails, MetadataSearchResult
 from app.services.grouping import GroupingService
+from app.utils.normalization import company_key
 from app.services.metadata_conflict import MetadataConflictResolver
 from app.services.settings import SettingsService
 
@@ -490,7 +491,14 @@ class MetadataService:
         except Exception:
             logger.exception("Metadata supplement failed", extra={"provider": provider.name, "provider_id": candidate.provider_id})
             return None
+        if details is None:
+            return None
         # Same name, different year: a remake or an unrelated game.
-        if details and primary.release_date and details.release_date and abs(primary.release_date.year - details.release_date.year) > 1:
+        if primary.release_date and details.release_date and abs(primary.release_date.year - details.release_date.year) > 1:
+            return None
+        # Same name and year but no developer in common: an unrelated game that happens to share the title.
+        if primary.developers and details.developers and not (
+            {company_key(name) for name in primary.developers} & {company_key(name) for name in details.developers}
+        ):
             return None
         return details
