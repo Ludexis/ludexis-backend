@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 from app.core.auth import get_current_active_user, require_permission
 from app.db.session import get_db
 from app.schemas.archive_entry import (
-    ArchiveEntryCreate, ArchiveEntryRead, ArchiveEntryUpdate, ArchiveIdentifyRequest, ArchiveIdentifyResult, ArchiveMetadataUpdate,
+    ArchiveEntryCreate, ArchiveEntryRead, ArchiveEntryUpdate, ArchiveIdentifyRequest, ArchiveIdentifyResult, ArchiveLocationResult, ArchiveMetadataUpdate,
 )
 from app.schemas.screenshot import ScreenshotRead
 from app.services.archive_entry import ArchiveEntryService
@@ -18,6 +18,8 @@ from app.services.job import JobService
 from app.services.metadata import MetadataService
 from app.utils.audit_actions import AuditAction
 from app.utils.enums import JobType
+from app.utils import file_manager
+from pathlib import Path
 
 
 router = APIRouter(prefix="/archive-entries", tags=["archive_entries"])
@@ -242,6 +244,28 @@ def identify_archive_entry(
     )
     db.refresh(entry)
     return {"entry": entry, "updated_entries": len(updated), "artwork_job": job}
+
+
+@router.post(
+    "/{archive_entry_id}/open-location",
+    response_model=ArchiveLocationResult,
+    summary="Open archive location",
+    description="Show the entry's file or folder in the file manager of the machine running the server. "
+    "404 when the file, folder or drive is not there.",
+    response_description="Where the entry is, and whether a file manager was opened.",
+)
+def open_archive_location(
+    archive_entry_id: str,
+    current_user=Depends(require_permission(PermissionName.ACCESS_ADMIN)),
+    db: Session = Depends(get_db),
+):
+    entry = service.get(db, archive_entry_id)
+    if entry is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Archive entry not found")
+    path = Path(entry.file_path)
+    if not path.exists():
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Directory not found")
+    return {"path": str(path), "opened": file_manager.reveal(path)}
 
 
 @router.delete(

@@ -185,3 +185,9 @@ class ArchiveIdentifyResult(BaseModel):
     entry: ArchiveEntryRead
     updated_entries: int
     artwork_job: JobHistoryRead
+
+
+class ArchiveLocationResult(BaseModel):
+    path: str
+    # False when the server has no desktop to open it on (it runs in a container, say).
+    opened: bool

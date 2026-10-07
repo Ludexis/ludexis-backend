@@ -243,3 +243,29 @@ def test_patch_archive_entry_keeps_omitted_fields():
     assert body["title"] == title
     assert body["file_path"] == file_path
     assert body["tag_ids"] == [tag.json()["id"]]
+
+
+def test_open_location_reveals_existing_paths_and_reports_missing_ones(tmp_path, monkeypatch):
+    from app.utils import file_manager
+
+    revealed = []
+    monkeypatch.setattr(file_manager, "reveal", lambda path: revealed.append(path) or True)
+    token = admin_token()
+    archive = tmp_path / "game.zip"
+    archive.write_bytes(b"x")
+    present = _create_entry(token, f"Present {_unique()}", str(archive))
+    gone = _create_entry(token, f"Gone {_unique()}", str(tmp_path / "unplugged" / "game.zip"))
+
+    response = client.post(f"/api/archive-entries/{present['id']}/open-location", headers=_auth(token))
+    assert response.status_code == 200
+    assert response.json() == {"path": str(archive), "opened": True}
+    assert revealed == [archive]
+
+    response = client.post(f"/api/archive-entries/{gone['id']}/open-location", headers=_auth(token))
+    assert response.status_code == 404
+    assert response.json()["detail"] == "Directory not found"
+    assert len(revealed) == 1
+
+    # Opening windows on the server is for administrators only.
+    response = client.post(f"/api/archive-entries/{present['id']}/open-location", headers=_auth(user_token()))
+    assert response.status_code == 403
