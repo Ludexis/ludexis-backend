@@ -10,7 +10,7 @@ from app.core.logging import get_logger
 from app.models.archive_entry import ArchiveEntry
 from app.models.association_tables import archive_entry_relations
 from app.models.collection import Collection
-from app.utils.enums import RelationshipType
+from app.utils.enums import MetadataStatus, RelationshipType
 from app.utils.normalization import parse_archive_name, title_key
 
 logger = get_logger(__name__)
@@ -49,6 +49,8 @@ class GroupingService:
                 series[entry.series_key].append(entry)
                 series_titles.setdefault(entry.series_key, parsed.series_title)
 
+        self._merge_matched(groups)
+
         for members in groups.values():
             primary = max(members, key=lambda e: (version_order(e.version), e.modified_time or OLDEST, e.created_at or OLDEST))
             for entry in members:
@@ -79,6 +81,37 @@ class GroupingService:
         }
         logger.info("Regrouped library", extra=stats)
         return stats
+
+    def _merge_matched(self, groups: dict[str, list[ArchiveEntry]]) -> None:
+        # File names of one game can differ beyond the version ("Game-v1_Ext" vs "Game-v2"); groups whose
+        # entries are matched to the same provider record are one game. Episode and season stay part of the
+        # identity so episodes sharing one provider record remain separate cards.
+        keys_by_identity: dict[tuple, set[str]] = defaultdict(set)
+        for key, members in groups.items():
+            for entry in members:
+                if entry.metadata_source_code and entry.metadata_status in (MetadataStatus.MATCHED, MetadataStatus.MANUAL):
+                    identity = (entry.metadata_source, entry.metadata_source_code, entry.season, entry.episode)
+                    keys_by_identity[identity].add(key)
+
+        parent: dict[str, str] = {}
+
+        def root(key: str) -> str:
+            while parent.get(key, key) != key:
+                key = parent[key]
+            return key
+
+        for keys in keys_by_identity.values():
+            roots = {root(key) for key in keys}
+            target = min(roots)
+            for key in roots:
+                parent[key] = target
+
+        for key in list(groups):
+            target = root(key)
+            if target != key:
+                for entry in groups.pop(key):
+                    entry.group_key = target
+                    groups[target].append(entry)
 
     def _link_episodes(self, db: Session, members: list[ArchiveEntry]) -> None:
         # Each episode's primary version points at the next one (EPISODE), rebuilt so a new primary version takes over.

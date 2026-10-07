@@ -282,6 +282,8 @@ class MetadataService:
             entry.metadata_status = MetadataStatus.MATCHED
             entry.metadata_confidence = 1.0
             self.refresh_archive(db, entry, details)
+        # The new match can join this entry to versions whose file names differ.
+        GroupingService().regroup(db)
         logger.info(
             "Archive identified",
             extra={"archive_id": archive.id, "provider": provider_name, "provider_id": provider_id, "entries": len(targets)},

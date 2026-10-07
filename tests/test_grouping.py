@@ -6,7 +6,7 @@ import sqlalchemy as sa
 from app.models.archive_entry import ArchiveEntry
 from app.models.association_tables import archive_entry_relations
 from app.models.collection import Collection
-from app.services.grouping import version_order
+from app.services.grouping import GroupingService, version_order
 from app.services.metadata import MetadataService
 from app.services.scanner import ScannerService
 from app.utils.enums import MetadataStatus, RelationshipType
@@ -82,6 +82,33 @@ def test_versions_of_one_episode_are_not_a_series(db, tmp_path):
 
     key = entries_for(db, tmp_path)[0].series_key
     assert db.query(Collection).filter(Collection.auto_key == key).count() == 0
+
+
+def test_versions_matched_to_one_record_group_despite_different_names(db, tmp_path):
+    name, series = unique_word(), unique_word()
+    (tmp_path / f"{name} Extra v1.0.zip").write_bytes(uuid.uuid4().bytes)
+    (tmp_path / f"{name} v2.0.zip").write_bytes(uuid.uuid4().bytes)
+    for episode in (1, 2):
+        (tmp_path / f"{series} Ep {episode} v1.0.zip").write_bytes(uuid.uuid4().bytes)
+    ScannerService().scan_full(db, scan_root=str(tmp_path))
+    entries = entries_for(db, tmp_path)
+    versions = [entry for entry in entries if entry.episode is None]
+    episodes = [entry for entry in entries if entry.episode is not None]
+    assert len({entry.group_key for entry in versions}) == 2
+
+    codes = {"versions": f"v-{name}", "episodes": f"v-{series}"}
+    for entry in entries:
+        entry.metadata_status = MetadataStatus.MATCHED
+        entry.metadata_source = "VNDB"
+        entry.metadata_source_code = codes["versions" if entry in versions else "episodes"]
+    db.commit()
+    GroupingService().regroup(db)
+
+    assert len({entry.group_key for entry in versions}) == 1
+    assert [entry.version for entry in versions if entry.is_primary_version] == ["2.0"]
+    # Episodes sharing one provider record stay separate cards.
+    assert len({entry.group_key for entry in episodes}) == 2
+    assert all(entry.is_primary_version for entry in episodes)
 
 
 class CountingMetadataService(MetadataService):

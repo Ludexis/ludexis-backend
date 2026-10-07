@@ -3,6 +3,7 @@ from sqlalchemy.orm import Session
 from app.core.logging import get_logger
 from app.models.job_history import JobHistory
 from app.services.artwork import ArtworkService
+from app.services.grouping import GroupingService
 from app.services.metadata import MetadataService
 from app.services.scanner import ProgressCallback
 from app.utils.enums import JobStatus, MetadataStatus
@@ -52,6 +53,9 @@ class EnrichmentService:
             stats["processed"] += 1
             if on_progress:
                 on_progress(index, len(entries))
+        if stats["matched"]:
+            # New matches can join versions whose file names differ.
+            GroupingService().regroup(db)
         return stats
 
     def _job_cancelled(self, db: Session, job_id: str) -> bool:
