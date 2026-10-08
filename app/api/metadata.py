@@ -6,6 +6,7 @@ from app.core.dependencies import get_metadata_service
 from app.db.session import get_db
 from app.schemas.metadata import MetadataDetails, MetadataSearchResult
 from app.services.metadata import MetadataService
+from app.services.settings import SettingsService
 
 router = APIRouter(prefix="/metadata", tags=["metadata"])
 
@@ -29,13 +30,33 @@ def search_metadata(
         description='Search only this provider, or "all" for every enabled provider; results include cover thumbnails.',
         examples=["VNDB", "all"],
     ),
+    developer: str | None = Query(
+        None,
+        max_length=256,
+        description="Optional developer name; with a provider, that developer's games are searched too and listed first.",
+        examples=["Example Studio"],
+    ),
     current_user=Depends(get_current_active_user),
     metadata_service: MetadataService = Depends(get_metadata_service),
     db: Session = Depends(get_db),
 ):
     if provider:
-        return metadata_service.search_providers(db, q, provider)
+        return metadata_service.search_providers(db, q, provider, developer=developer.strip() if developer else None)
     return metadata_service.search(q, preferred_providers=provider_priority)
+
+
+@router.get(
+    "/providers",
+    response_model=list[str],
+    summary="List match providers",
+    description="Providers interactive search and auto-matching use, in their configured order.",
+    response_description="Enabled provider names.",
+)
+def list_match_providers(
+    current_user=Depends(get_current_active_user),
+    db: Session = Depends(get_db),
+):
+    return SettingsService().match_providers(db)
 
 
 @router.get(

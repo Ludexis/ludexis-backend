@@ -13,7 +13,8 @@ class MetadataProvider(ABC):
     priority: int = 100
 
     @abstractmethod
-    def search(self, query: str, limit: int = 20) -> list[MetadataSearchResult]:
+    def search(self, query: str, limit: int = 20, developer: str | None = None) -> list[MetadataSearchResult]:
+        """developer, when the provider can filter by it, narrows the search to that studio's games."""
         raise NotImplementedError
 
     @abstractmethod

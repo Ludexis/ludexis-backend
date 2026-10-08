@@ -11,6 +11,7 @@ class MetadataSearchResult(BaseModel):
     release_date: date | None = None
     score: float | None = None
     cover_url: str | None = None
+    developers: list[str] = []
 
 class MetadataDetails(BaseModel):
     provider: str

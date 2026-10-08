@@ -10,7 +10,7 @@ from app.schemas.metadata import MetadataDetails, MetadataSearchResult
 from app.services.grouping import GroupingService
 from app.utils.normalization import company_key
 from app.services.metadata_conflict import MetadataConflictResolver
-from app.services.settings import SettingsService
+from app.services.settings import VN_PROVIDERS, SettingsService
 
 from app.models.genre import Genre
 from app.models.developer import Developer
@@ -33,6 +33,11 @@ MATCHED_THRESHOLD = 0.85
 PARTIAL_THRESHOLD = 0.70
 # Providers auto-matching tries, in order, until one gives a confident match.
 DEFAULT_PROVIDER_ORDER = ["VNDB", "IGDB", "Steam"]
+
+
+def _made_by(result: MetadataSearchResult, developer: str) -> bool:
+    wanted = company_key(developer)
+    return any(wanted in company_key(name) or company_key(name) in wanted for name in result.developers if company_key(name))
 
 
 def title_similarity(left: str, right: str) -> float:
@@ -259,15 +264,29 @@ class MetadataService:
         )
         return results
 
-    def search_providers(self, db: Session, query: str, provider_name: str, limit: int = 10) -> list[MetadataSearchResult]:
+    def search_providers(
+        self, db: Session, query: str, provider_name: str, limit: int = 10, developer: str | None = None
+    ) -> list[MetadataSearchResult]:
         # Interactive search: one named provider, or "all" enabled providers in their configured order.
         metadata_searches_total.inc()
         if provider_name.lower() == "all":
             providers = self._match_providers(db)
         else:
             provider = self._get_provider(provider_name)
-            providers = [provider] if provider else []
-        return [result for provider in providers for result in self._search_provider(provider, query, limit)]
+            vn_off = provider is not None and provider.name in VN_PROVIDERS and not SettingsService().get(db, "vn_sources")
+            providers = [provider] if provider and not vn_off else []
+        results = []
+        for provider in providers:
+            found = self._search_provider(provider, query, limit)
+            if developer:
+                # The developer-filtered search reaches games the title alone ranks too low; games by that
+                # developer then lead the list.
+                unique = {}
+                for result in self._search_provider(provider, query, limit, developer) + found:
+                    unique.setdefault(result.provider_id, result)
+                found = sorted(unique.values(), key=lambda result: not _made_by(result, developer))
+            results.extend(found)
+        return results
 
     def identify(self, db: Session, archive: ArchiveEntry, provider_name: str, provider_id: str) -> list[ArchiveEntry] | None:
         # A user-chosen match applies to every version of the game, except versions whose metadata is locked.
@@ -291,9 +310,9 @@ class MetadataService:
         )
         return targets
 
-    def _search_provider(self, provider: MetadataProvider, query: str, limit: int) -> list[MetadataSearchResult]:
+    def _search_provider(self, provider: MetadataProvider, query: str, limit: int, developer: str | None = None) -> list[MetadataSearchResult]:
         try:
-            provider_results = provider.search(query, limit=limit)
+            provider_results = provider.search(query, limit=limit, developer=developer) if developer else provider.search(query, limit=limit)
         except NotImplementedError:
             return []
         except Exception:
@@ -344,7 +363,7 @@ class MetadataService:
         if self._provider_order:
             return self._provider_order
         if db is not None:
-            return SettingsService().get(db, "provider_order")
+            return SettingsService().match_providers(db)
         return DEFAULT_PROVIDER_ORDER
 
     def _get_providers(self, preferred_providers: list[str] | None) -> list[MetadataProvider]:

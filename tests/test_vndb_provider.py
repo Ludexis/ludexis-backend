@@ -41,6 +41,19 @@ def test_search_parses_results():
 
 
 @patch.object(vndb, "MIN_INTERVAL_SECONDS", 0)
+def test_search_by_developer_narrows_the_filter_and_returns_developers():
+    with patch("app.providers.vndb.requests.post", return_value=response([
+        {"id": "v100", "title": "Quiet Meadow", "developers": [{"id": "p1", "name": "Lantern Works"}]},
+    ])) as post:
+        results = VNDBProvider().search("quiet meadow", limit=5, developer="lantern")
+
+    assert post.call_args.kwargs["json"]["filters"] == [
+        "and", ["search", "=", "quiet meadow"], ["developer", "=", ["search", "=", "lantern"]],
+    ]
+    assert results[0].developers == ["Lantern Works"]
+
+
+@patch.object(vndb, "MIN_INTERVAL_SECONDS", 0)
 def test_details_filter_tags_and_strip_markup():
     tags = [{"name": f"Tag {i}", "rating": 3.0 - i * 0.05, "spoiler": 0} for i in range(20)]
     tags += [{"name": "Spoiler", "rating": 3.0, "spoiler": 2}, {"name": "Weak", "rating": 1.0, "spoiler": 0}]

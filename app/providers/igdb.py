@@ -18,19 +18,29 @@ class IGDBProvider(MetadataProvider):
         self,
         query: str,
         limit: int = 20,
+        developer: str | None = None,
     ) -> list[MetadataSearchResult]:
 
         # Without Twitch credentials IGDB is skipped rather than failing every search.
         if not query or not self.client.configured():
             return []
 
+        quote = lambda text: text.replace("\\", "").replace('"', '\\"')
+        developer_filter = (
+            f'where involved_companies.company.name ~ *"{quote(developer)}"*;'
+            if developer
+            else ""
+        )
         igdb_query = f"""
-        search "{query}";
+        search "{quote(query)}";
         fields
             name,
             summary,
             first_release_date,
-            cover.url;
+            cover.url,
+            involved_companies.company.name,
+            involved_companies.developer;
+        {developer_filter}
         limit {limit};
         """
 
@@ -60,6 +70,11 @@ class IGDBProvider(MetadataProvider):
                     release_date=release_date,
                     score=None,
                     cover_url=("https:" + game["cover"]["url"].replace("t_thumb", "t_cover_small")) if game.get("cover", {}).get("url") else None,
+                    developers=[
+                        company["company"]["name"]
+                        for company in game.get("involved_companies", [])
+                        if company.get("developer") and company.get("company", {}).get("name")
+                    ],
                 )
             )
 

@@ -154,3 +154,48 @@ def test_merged_details_skip_a_same_name_game_by_other_developers():
     merged = service.get_merged_details("Quiet Meadow", "VNDB", "v1")
     assert merged.banner_urls == []
     assert merged.developers == ["Pond Works"]
+
+
+class StudioProvider(MetadataProvider):
+    """Two same-named games; only a developer-filtered search finds the second studio's one."""
+
+    name = "Studio"
+
+    def __init__(self) -> None:
+        self.calls = []
+
+    def search(self, query, limit=20, developer=None):
+        self.calls.append(developer)
+        first = MetadataSearchResult(provider=self.name, provider_id="1", title=query, developers=["Other Works"])
+        second = MetadataSearchResult(provider=self.name, provider_id="2", title=query, developers=["Lantern Works Ltd."])
+        return [second] if developer else [first]
+
+    def get_details(self, external_id):
+        return None
+
+    def download_artwork(self, external_id):
+        return None
+
+
+def test_interactive_search_with_a_developer_lists_that_developers_games_first():
+    provider = StudioProvider()
+    service = MetadataService(providers=[provider])
+
+    results = service.search_providers(None, "Quiet Meadow", "all", developer="lantern works")
+
+    assert [result.provider_id for result in results] == ["2", "1"]
+    assert provider.calls == [None, "lantern works"]
+    assert [result.provider_id for result in service.search_providers(None, "Quiet Meadow", "all")] == ["1"]
+
+
+def test_vndb_is_matched_only_while_visual_novel_sources_are_on():
+    from unittest.mock import patch
+
+    from app.services.settings import SettingsService
+
+    stored = {"provider_order": ["VNDB", "IGDB", "Steam"], "vn_sources": False}
+    with patch.object(SettingsService, "get", lambda self, db, key: stored[key]):
+        assert SettingsService().match_providers(None) == ["IGDB", "Steam"]
+        assert MetadataService().search_providers(None, "Quiet Meadow", "VNDB") == []
+        stored["vn_sources"] = True
+        assert SettingsService().match_providers(None) == ["VNDB", "IGDB", "Steam"]

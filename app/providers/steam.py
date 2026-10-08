@@ -14,7 +14,8 @@ class SteamProvider(MetadataProvider):
     SEARCH_URL = ("https://store.steampowered.com/api/storesearch")
     APP_URL = ("https://store.steampowered.com/api/appdetails")
 
-    def search(self, query: str, limit: int = 20,) -> list[MetadataSearchResult]:
+    def search(self, query: str, limit: int = 20, developer: str | None = None) -> list[MetadataSearchResult]:
+        # The store search has no developer filter; the title search alone is used.
         response = requests.get(
             self.SEARCH_URL,
             params={

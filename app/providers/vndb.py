@@ -67,10 +67,13 @@ class VNDBProvider(MetadataProvider):
         response.raise_for_status()
         return response.json().get("results", [])
 
-    def search(self, query: str, limit: int = 20) -> list[MetadataSearchResult]:
+    def search(self, query: str, limit: int = 20, developer: str | None = None) -> list[MetadataSearchResult]:
+        filters = ["search", "=", query]
+        if developer:
+            filters = ["and", filters, ["developer", "=", ["search", "=", developer]]]
         results = self._query({
-            "filters": ["search", "=", query],
-            "fields": "title, alttitle, released, image.thumbnail",
+            "filters": filters,
+            "fields": "title, alttitle, released, image.thumbnail, developers.name",
             "results": min(limit, 100),
         })
         return [
@@ -80,6 +83,7 @@ class VNDBProvider(MetadataProvider):
                 title=item["title"],
                 release_date=_parse_released(item.get("released")),
                 cover_url=(item.get("image") or {}).get("thumbnail"),
+                developers=[developer["name"] for developer in item.get("developers", [])],
             )
             for item in results
         ]
