@@ -1,8 +1,13 @@
+import os
 import sys
+import tempfile
 from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
+
+# Tests save artwork; keep it out of the artwork folder a local .env points at.
+os.environ["ARTWORK_STORAGE_PATH"] = tempfile.mkdtemp(prefix="ludexis-test-artwork-")
 
 import pytest
 

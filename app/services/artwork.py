@@ -1,4 +1,5 @@
 from pathlib import Path
+import time
 import requests
 from fastapi import UploadFile
 from sqlalchemy.orm import Session, object_session
@@ -33,6 +34,10 @@ logger = get_logger(__name__)
 SHAPE_BONUS = 1000
 # Most years a SteamGridDB game may differ from the matched record's release date.
 MAX_YEAR_GAP = 2
+# Screenshots scored as a banner fallback; each one is downloaded to be measured.
+SCREENSHOT_BANNER_CANDIDATES = 4
+# Unreferenced files younger than this may belong to a download still being saved.
+ORPHAN_MIN_AGE_SECONDS = 3600
 
 
 class ArtworkService:
@@ -58,10 +63,11 @@ class ArtworkService:
     def _add_steamgriddb_art(self, db: Session, details: MetadataDetails) -> None:
         # Community art is offered after the sources' own, so official art wins a tie; it matters most
         # where no source has a portrait cover or a wide banner.
-        api_key = SettingsService().steamgriddb_key(db)
+        settings_service = SettingsService()
+        api_key = settings_service.steamgriddb_key(db)
         if not api_key:
             return
-        client = SteamGridDBClient(api_key)
+        client = SteamGridDBClient(api_key, all_ratings=settings_service.get(db, "vn_sources"))
         year = details.release_date.year if details.release_date else None
         try:
             same_name = [game for game in client.search(details.title) if title_key(game["name"]) == title_key(details.title)]
@@ -271,6 +277,8 @@ class ArtworkService:
         # A landscape "cover" (common on VNDB) is usually the game's key art and makes a better banner
         # than a small store header, so cover candidates compete for the banner too.
         artwork_url = self._select_best_url(details.banner_urls + details.cover_urls, "landscape", shape_only=details.cover_urls)
+        # Without key art, a screenshot of the matched game still beats an empty or stale backdrop.
+        artwork_url = artwork_url or self._select_best_url(details.artwork_urls[:SCREENSHOT_BANNER_CANDIDATES], "landscape")
         if artwork_url is None:
             return False
         contents, extension = (
@@ -785,6 +793,7 @@ class ArtworkService:
             "incomplete": sum(1 for item in validation if not item["complete"]),
             "repaired": repaired,
             "failed": failed,
+            "unused_removed": self.garbage_collect_artwork(db)["deleted"],
         }
 
     def _score_image(self, contents: bytes, shape: str | None = None) -> int:
@@ -1015,74 +1024,29 @@ class ArtworkService:
             deduplicated,
         }
     
-    def garbage_collect_artwork(self, db,) -> dict:
-        referenced = set()
-        archives = (
-            db.query(
-                ArchiveEntry
-            )
-            .all()
-        )
-        for archive in archives:
-            for asset_path in (
-                archive.cover_path,
-                archive.banner_path,
-                archive.logo_path,
-            ):
-                if asset_path:
-                    referenced.add(
-                        asset_path
-                    )
-        deleted = 0
-        kept = 0
-        covers_dir = (
-            self.storage.absolute_path(
-                "covers"
-            )
-        )
-        banners_dir = (
-            self.storage.absolute_path(
-                "banners"
-            )
-        )
-        logos_dir = (
-            self.storage.absolute_path(
-                "logos"
-            )
-        )
-        for directory in (
-            covers_dir,
-            banners_dir,
-            logos_dir,
-        ):
-            if not directory.exists():
-                continue
-            for file_path in directory.rglob(
-                "*"
-            ):
-                if not file_path.is_file():
-                    continue
-                relative_path = str(
-                    file_path.relative_to(
-                        self.storage.base_dir
-                    )
-                ).replace(
-                    "\\",
-                    "/",
-                )
-                if (
-                    relative_path
-                    in referenced
-                ):
-                    kept += 1
-                    continue
-                file_path.unlink()
-                deleted += 1
-        return {
-            "deleted": deleted,
-            "kept": kept,
+    def garbage_collect_artwork(self, db: Session) -> dict:
+        """Delete stored images no entry or screenshot points at: art left by removed entries or interrupted saves."""
+        referenced = {
+            path.replace("\\", "/")
+            for row in db.query(ArchiveEntry.cover_path, ArchiveEntry.banner_path, ArchiveEntry.logo_path).all()
+            for path in row
+            if path
         }
-    
+        referenced.update(path.replace("\\", "/") for (path,) in db.query(Screenshot.file_path).all() if path)
+        cutoff = time.time() - ORPHAN_MIN_AGE_SECONDS
+        deleted = kept = 0
+        for file_path in self.storage.base_dir.rglob("*"):
+            if not file_path.is_file():
+                continue
+            if file_path.relative_to(self.storage.base_dir).as_posix() in referenced or file_path.stat().st_mtime > cutoff:
+                kept += 1
+                continue
+            file_path.unlink()
+            deleted += 1
+        if deleted:
+            logger.info("Unused artwork removed", extra={"deleted": deleted, "kept": kept})
+        return {"deleted": deleted, "kept": kept}
+
     def _download_screenshots(self, db, archive, screenshot_urls: list[str],) -> int:
         imported = 0
         for screenshot in list(

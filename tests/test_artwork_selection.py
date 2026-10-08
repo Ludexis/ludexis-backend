@@ -92,6 +92,7 @@ def test_steamgriddb_art_is_added_for_the_same_game_only():
     details = MetadataDetails(provider="VNDB", provider_id="v1", title="Quiet Meadow", release_date=date(2021, 5, 4),
                               cover_urls=["https://vndb.example/cover.jpg"])
     with patch("app.services.artwork.SettingsService.steamgriddb_key", return_value="key"), \
+            patch("app.services.artwork.SettingsService.get", return_value=False), \
             patch("app.providers.steamgriddb.requests.get", side_effect=fake_get) as get:
         ArtworkService()._add_steamgriddb_art(None, details)
 
@@ -99,6 +100,24 @@ def test_steamgriddb_art_is_added_for_the_same_game_only():
     assert details.banner_urls == ["https://grid.example/heroes-3.png"]
     assert details.logo_urls == ["https://grid.example/logos-3.png"]
     assert get.call_args.kwargs["headers"] == {"Authorization": "Bearer key"}
+    # With visual novel sources off, art the site flags is left out.
+    assert get.call_args.kwargs["params"]["nsfw"] == "false"
+
+
+def test_steamgriddb_takes_every_rating_with_visual_novel_sources_on():
+    from unittest.mock import MagicMock, patch
+
+    from app.schemas.metadata import MetadataDetails
+
+    response = MagicMock(status_code=200)
+    response.json.return_value = {"data": [{"id": 3, "name": "Quiet Meadow", "url": "https://grid.example/a.png"}]}
+    details = MetadataDetails(provider="IGDB", provider_id="1", title="Quiet Meadow")
+    with patch("app.services.artwork.SettingsService.steamgriddb_key", return_value="key"), \
+            patch("app.services.artwork.SettingsService.get", return_value=True), \
+            patch("app.providers.steamgriddb.requests.get", return_value=response) as get:
+        ArtworkService()._add_steamgriddb_art(None, details)
+
+    assert get.call_args.kwargs["params"]["nsfw"] == "any"
 
 
 def test_steamgriddb_skips_a_same_named_game_from_years_apart():
@@ -110,8 +129,66 @@ def test_steamgriddb_skips_a_same_named_game_from_years_apart():
     response = MagicMock(status_code=200)
     response.json.return_value = {"data": [{"id": 2, "name": "Quiet Meadow", "release_date": 946684800}]}
     details = MetadataDetails(provider="VNDB", provider_id="v1", title="Quiet Meadow", release_date=date(2021, 5, 4))
-    with patch("app.services.artwork.SettingsService.steamgriddb_key", return_value="key"),             patch("app.providers.steamgriddb.requests.get", return_value=response) as get:
+    with patch("app.services.artwork.SettingsService.steamgriddb_key", return_value="key"), \
+            patch("app.services.artwork.SettingsService.get", return_value=False), \
+            patch("app.providers.steamgriddb.requests.get", return_value=response) as get:
         ArtworkService()._add_steamgriddb_art(None, details)
 
     assert get.call_count == 1
     assert details.cover_urls == []
+
+
+def test_banner_falls_back_to_a_screenshot_of_the_new_match():
+    import uuid
+
+    from app.models.archive_entry import ArchiveEntry
+    from app.schemas.metadata import MetadataDetails
+    from tests.test_db import TestingSessionLocal
+
+    db = TestingSessionLocal()
+    entry = ArchiveEntry(title="Quiet Meadow", file_path=f"D:/Tmp/{uuid.uuid4()}.zip", banner_path="banners/old-match.jpg")
+    db.add(entry)
+    db.commit()
+
+    class ReplacingService(FakeArtworkService):
+        def _entry_details(self, entry):
+            return MetadataDetails(
+                provider="VNDB", provider_id="v1", title="Quiet Meadow", cover_urls=["tall-small"], artwork_urls=["wide-big"]
+            )
+
+    service = ReplacingService()
+    service.storage.delete = lambda path: None
+    service.storage.save = lambda path, contents: path
+    service.replace_entries_artwork(db, [entry.id])
+    db.refresh(entry)
+
+    assert entry.banner_path == f"banners/{entry.id}.jpg"
+    db.close()
+
+
+def test_unused_artwork_is_removed_and_referenced_or_fresh_files_kept():
+    import os
+    import time
+    import uuid
+
+    from app.models.archive_entry import ArchiveEntry
+    from tests.test_db import TestingSessionLocal
+
+    db = TestingSessionLocal()
+    service = ArtworkService()
+    kept_path = f"covers/{uuid.uuid4()}.jpg"
+    entry = ArchiveEntry(title="Quiet Meadow", file_path=f"D:/Tmp/{uuid.uuid4()}.zip", cover_path=kept_path)
+    db.add(entry)
+    db.commit()
+    stale = service.storage.absolute_path(service.storage.save(f"banners/{uuid.uuid4()}.jpg", b"old"))
+    fresh = service.storage.absolute_path(service.storage.save(f"logos/{uuid.uuid4()}.png", b"saving"))
+    referenced = service.storage.absolute_path(service.storage.save(kept_path, b"cover"))
+    hour_ago = time.time() - 7200
+    os.utime(stale, (hour_ago, hour_ago))
+    os.utime(referenced, (hour_ago, hour_ago))
+
+    service.garbage_collect_artwork(db)
+
+    assert not stale.exists()
+    assert fresh.exists() and referenced.exists()
+    db.close()

@@ -6,15 +6,17 @@ import requests
 API_URL = "https://www.steamgriddb.com/api/v2"
 # Every candidate is downloaded to be scored, so only the community's top picks are offered.
 PER_TYPE = 3
-# Static images only; joke art is left out. NSFW art is allowed because a game's own cover may be flagged.
-FILTERS = {"types": "static", "nsfw": "any", "humor": "false"}
+# Static images only; joke art is left out.
+FILTERS = {"types": "static", "humor": "false"}
 
 
 class SteamGridDBClient:
     """Community artwork: portrait covers (grids), wide heroes and logos, for any game the site knows."""
 
-    def __init__(self, api_key: str) -> None:
+    def __init__(self, api_key: str, all_ratings: bool = False) -> None:
         self.api_key = api_key
+        # Every rating also brings art the site flags, which a game's own cover sometimes is.
+        self.ratings = "any" if all_ratings else "false"
 
     def _get(self, path: str, **params) -> list[dict]:
         response = requests.get(
@@ -41,7 +43,7 @@ class SteamGridDBClient:
 
     def artwork(self, game_id: int) -> dict[str, list[str]]:
         def urls(kind: str, **params) -> list[str]:
-            return [image["url"] for image in self._get(f"/{kind}/game/{game_id}", **FILTERS, **params)[:PER_TYPE]]
+            return [image["url"] for image in self._get(f"/{kind}/game/{game_id}", **FILTERS, nsfw=self.ratings, **params)[:PER_TYPE]]
 
         return {
             "cover_urls": urls("grids", dimensions="600x900,660x930,342x482"),
