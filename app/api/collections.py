@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
 from app.core.auth import get_current_active_user, require_permission
@@ -26,8 +26,9 @@ def list_collections(
     offset: int = 0,
     limit: int = 100,
     q: str | None = None,
+    include_hidden: bool = Query(False, description="Also list collections hidden in the server settings"),
 ):
-    return service.list_items(db, offset=offset, limit=limit, q=q)
+    return service.list_items(db, offset=offset, limit=limit, q=q, include_hidden=include_hidden)
 
 
 @router.get(

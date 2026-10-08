@@ -10,8 +10,13 @@ DEFAULTS = {
     "igdb_client_id": "",
     "igdb_client_secret": "",
     "steamgriddb_api_key": "",
+    # Off by default: VNDB stays out of matching, and SteamGridDB art is limited to its default ratings.
+    "vn_sources": False,
+    # Collections whose games are left out of the library, home, search and other listings.
+    "hidden_collections": [],
 }
 MATCH_PROVIDERS = ["VNDB", "IGDB", "Steam"]
+VN_PROVIDERS = {"VNDB"}
 
 
 class SettingsService:
@@ -33,6 +38,11 @@ class SettingsService:
             return env.TWITCH_CLIENT_ID, env.TWITCH_CLIENT_SECRET
         return self.get(db, "igdb_client_id"), self.get(db, "igdb_client_secret")
 
+    def match_providers(self, db: Session) -> list[str]:
+        """The configured order without providers the visual novel switch leaves out."""
+        vn_sources = self.get(db, "vn_sources")
+        return [name for name in self.get(db, "provider_order") if vn_sources or name not in VN_PROVIDERS]
+
     def steamgriddb_key(self, db: Session) -> str:
         return env.STEAMGRIDDB_API_KEY or self.get(db, "steamgriddb_api_key")
 
@@ -47,4 +57,6 @@ class SettingsService:
             "igdb_from_env": bool(env.TWITCH_CLIENT_ID and env.TWITCH_CLIENT_SECRET),
             "steamgriddb_configured": bool(self.steamgriddb_key(db)),
             "steamgriddb_from_env": bool(env.STEAMGRIDDB_API_KEY),
+            "vn_sources": self.get(db, "vn_sources"),
+            "hidden_collections": self.get(db, "hidden_collections"),
         }

@@ -5,6 +5,7 @@ from app.core.auth import get_current_active_user
 from app.db.session import get_db
 from app.schemas.archive_entry import ArchiveEntryRead
 from app.services.search import SearchService
+from app.services.settings import SettingsService
 
 router = APIRouter(prefix="/search", tags=["search"])
 service = SearchService()
@@ -31,6 +32,7 @@ def search_archive_entries(
     verification_status: str | None = Query(None, description="Verification status filter", examples=["VERIFIED"]),
     storage_device: str | None = Query(None, description="Storage device filter", examples=["NAS-01"]),
     group_versions: bool = Query(False, description="Return one entry per game, with version_count set"),
+    include_hidden: bool = Query(False, description="Include games in collections hidden in the server settings"),
     sort: str = Query(
         "title",
         pattern="^-?(title|created_at|release_date|file_size|random)$",
@@ -55,6 +57,7 @@ def search_archive_entries(
         verification_status=verification_status,
         storage_device=storage_device,
         group_versions=group_versions,
+        hidden_collection_ids=[] if include_hidden else SettingsService().get(db, "hidden_collections"),
     )
     response.headers["X-Total-Count"] = str(service.count(db, **filters))
     return service.search(db, sort=sort, offset=offset, limit=limit, **filters)

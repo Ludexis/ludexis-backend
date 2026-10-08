@@ -5,6 +5,7 @@ from app.models.archive_entry import ArchiveEntry
 from app.repositories.archive_entry import ArchiveEntryRepository
 from app.repositories.collection import CollectionRepository
 from app.schemas.collection import CollectionCreate, CollectionUpdate
+from app.services.settings import SettingsService
 
 
 class CollectionService:
@@ -12,8 +13,11 @@ class CollectionService:
         self.repo = CollectionRepository()
         self.entry_repo = ArchiveEntryRepository()
 
-    def list_items(self, db: Session, offset: int = 0, limit: int = 100, q: str | None = None) -> list[Collection]:
-        return self.repo.list_active(db, offset=offset, limit=limit, q=q)
+    def list_items(
+        self, db: Session, offset: int = 0, limit: int = 100, q: str | None = None, include_hidden: bool = False
+    ) -> list[Collection]:
+        hidden = None if include_hidden else SettingsService().get(db, "hidden_collections")
+        return self.repo.list_active(db, offset=offset, limit=limit, q=q, exclude_ids=hidden)
 
     def get(self, db: Session, collection_id: str) -> Collection | None:
         return self.repo.get_active(db, collection_id)

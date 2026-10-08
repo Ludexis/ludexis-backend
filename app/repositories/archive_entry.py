@@ -109,10 +109,16 @@ class ArchiveEntryRepository(BaseRepository[ArchiveEntry]):
         verification_status: str | None = None,
         storage_device: str | None = None,
         group_versions: bool = False,
+        hidden_collection_ids: list[str] | None = None,
     ) -> list:
         filters = [ArchiveEntry.deleted_at.is_(None)]
         if group_versions:
             filters.append(ArchiveEntry.is_primary_version.is_(True))
+
+        # Games in a hidden collection stay out of every listing except that collection's own page.
+        hidden = [collection for collection in hidden_collection_ids or [] if collection != collection_id]
+        if hidden:
+            filters.append(~ArchiveEntry.collections.any(Collection.id.in_(hidden)))
 
         if query:
             search_value = f"%{query}%"

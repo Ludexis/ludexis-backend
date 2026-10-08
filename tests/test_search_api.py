@@ -80,3 +80,23 @@ def test_genres_lists_names_with_entry_counts():
     _, genre, _, _ = seed_entries()
     genres = client.get("/api/genres/", headers=auth_headers()).json()
     assert {"name": genre, "entry_count": 3} in genres
+
+
+def test_hidden_collections_leave_listings_but_keep_their_own_page():
+    word, _genre, collection, collection_id = seed_entries()
+    headers = auth_headers()
+    try:
+        assert client.patch("/api/admin/settings", json={"hidden_collections": [collection_id]}, headers=headers).status_code == 200
+
+        assert titles(client.get("/api/search/", params={"q": word}, headers=headers)) == ["c"]
+        own_page = client.get("/api/search/", params={"collection_id": collection_id}, headers=headers)
+        assert titles(own_page) == ["A", "b"]
+        everything = client.get("/api/search/", params={"q": word, "include_hidden": True}, headers=headers)
+        assert titles(everything) == ["A", "b", "c"]
+
+        listed = [item["name"] for item in client.get("/api/collections/", params={"q": word}, headers=headers).json()]
+        assert listed == []
+        with_hidden = client.get("/api/collections/", params={"q": word, "include_hidden": True}, headers=headers).json()
+        assert [item["name"] for item in with_hidden] == [collection]
+    finally:
+        client.patch("/api/admin/settings", json={"hidden_collections": []}, headers=headers)
