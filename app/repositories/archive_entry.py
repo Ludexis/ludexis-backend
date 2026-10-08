@@ -110,6 +110,7 @@ class ArchiveEntryRepository(BaseRepository[ArchiveEntry]):
         storage_device: str | None = None,
         group_versions: bool = False,
         hidden_collection_ids: list[str] | None = None,
+        review_resolved: bool | None = None,
     ) -> list:
         filters = [ArchiveEntry.deleted_at.is_(None)]
         if group_versions:
@@ -163,6 +164,9 @@ class ArchiveEntryRepository(BaseRepository[ArchiveEntry]):
 
         if metadata_status:
             filters.append(ArchiveEntry.metadata_status == metadata_status)
+
+        if review_resolved is not None:
+            filters.append(ArchiveEntry.review_resolved.is_(review_resolved))
 
         if verification_status:
             filters.append(ArchiveEntry.verification_status == verification_status)

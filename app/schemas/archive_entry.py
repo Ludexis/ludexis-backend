@@ -104,6 +104,7 @@ class ArchiveEntryUpdate(BaseModel):
     publisher_ids: list[str] | None = None
     collection_ids: list[str] | None = None
     related_entry_ids: list[str] | None = None
+    review_resolved: bool | None = None
 
     model_config = {
         "json_schema_extra": {
@@ -151,6 +152,7 @@ class ArchiveEntryRead(ArchiveEntryBase, TimestampedModel):
     episode: int | None = None
     season: int | None = None
     is_primary_version: bool = True
+    review_resolved: bool = False
     # Set by grouped listings: how many versions share this entry's group.
     version_count: int = 1
 

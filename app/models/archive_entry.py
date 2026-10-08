@@ -57,6 +57,8 @@ class ArchiveEntry(Base):
     episode: int = mapped_column(sa.Integer, nullable=True)
     season: int = mapped_column(sa.Integer, nullable=True)
     is_primary_version: bool = mapped_column(sa.Boolean, nullable=False, default=True, server_default=sa.true())
+    # An admin dismissed this unmatched or partly matched game from the review queue.
+    review_resolved: bool = mapped_column(sa.Boolean, nullable=False, default=False, server_default=sa.false())
     parent_series_id = mapped_column(sa.String(36), sa.ForeignKey("archive_entries.id", ondelete="SET NULL"), nullable=True)
     franchise_id = mapped_column(sa.String(36), sa.ForeignKey("franchises.id", ondelete="SET NULL"), nullable=True, index=True)
     library_id = mapped_column(

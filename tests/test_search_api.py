@@ -100,3 +100,19 @@ def test_hidden_collections_leave_listings_but_keep_their_own_page():
         assert [item["name"] for item in with_hidden] == [collection]
     finally:
         client.patch("/api/admin/settings", json={"hidden_collections": []}, headers=headers)
+
+
+def test_review_resolved_filters_the_review_queue():
+    word, *_ = seed_entries()
+    headers = auth_headers()
+    games = client.get("/api/search/", params={"q": word}, headers=headers).json()
+    resolved = next(game for game in games if game["title"].startswith("A"))
+
+    response = client.patch(f"/api/archive-entries/{resolved['id']}", json={"review_resolved": True}, headers=headers)
+    assert response.status_code == 200
+    assert response.json()["review_resolved"] is True
+
+    open_queue = client.get("/api/search/", params={"q": word, "review_resolved": False}, headers=headers)
+    assert titles(open_queue) == ["b", "c"]
+    done = client.get("/api/search/", params={"q": word, "review_resolved": True}, headers=headers)
+    assert titles(done) == ["A"]
