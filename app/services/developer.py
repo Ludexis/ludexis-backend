@@ -9,20 +9,20 @@ class DeveloperService:
     def __init__(self) -> None:
         self.repo = DeveloperRepository()
 
-    def list_items(self, db: Session, offset: int = 0, limit: int = 100, q: str | None = None) -> list[Developer]:
-        developers = self.repo.list_items(db, offset=offset, limit=limit, q=q)
-        counts = self.repo.count_entries_for_ids(db, [developer.id for developer in developers])
+    def list_items(self, db: Session, offset: int = 0, limit: int = 100, q: str | None = None, viewer=None) -> list[Developer]:
+        developers = self.repo.list_items(db, offset=offset, limit=limit, q=q, viewer=viewer)
+        counts = self.repo.count_entries_for_ids(db, [developer.id for developer in developers], viewer)
         for developer in developers:
             developer.entry_count = counts.get(developer.id, 0)
         return developers
 
-    def count(self, db: Session, q: str | None = None) -> int:
-        return self.repo.count(db, q=q)
+    def count(self, db: Session, q: str | None = None, viewer=None) -> int:
+        return self.repo.count(db, q=q, viewer=viewer)
 
-    def get(self, db: Session, developer_id: str) -> Developer | None:
+    def get(self, db: Session, developer_id: str, viewer=None) -> Developer | None:
         developer = self.repo.get(db, developer_id)
         if developer is not None:
-            developer.entry_count = self.repo.count_entries_for_id(db, developer_id)
+            developer.entry_count = self.repo.count_entries_for_id(db, developer_id, viewer)
         return developer
 
     def create(self, db: Session, data: DeveloperCreate) -> Developer:

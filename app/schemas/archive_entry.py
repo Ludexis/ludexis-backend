@@ -105,6 +105,8 @@ class ArchiveEntryUpdate(BaseModel):
     collection_ids: list[str] | None = None
     related_entry_ids: list[str] | None = None
     review_resolved: bool | None = None
+    # Setting it by hand locks it against provider refreshes.
+    restricted: bool | None = None
 
     model_config = {
         "json_schema_extra": {
@@ -153,6 +155,11 @@ class ArchiveEntryRead(ArchiveEntryBase, TimestampedModel):
     season: int | None = None
     is_primary_version: bool = True
     review_resolved: bool = False
+    restricted: bool = False
+    restricted_locked: bool = False
+    # The requesting user's own marks.
+    is_favorite: bool = False
+    is_completed: bool = False
     # Set by grouped listings: how many versions share this entry's group.
     version_count: int = 1
 
@@ -187,6 +194,16 @@ class ArchiveEntryRead(ArchiveEntryBase, TimestampedModel):
     model_config = {
         "from_attributes": True,
     }
+
+
+class ArchiveEntryFlagsUpdate(BaseModel):
+    is_favorite: bool | None = None
+    is_completed: bool | None = None
+
+
+class ArchiveEntryFlags(BaseModel):
+    is_favorite: bool
+    is_completed: bool
 
 
 class ArchiveIdentifyResult(BaseModel):

@@ -10,6 +10,9 @@ class UserBase(BaseModel):
     email: EmailStr
     is_active: bool = True
     is_superuser: bool = False
+    allow_restricted: bool = False
+    # Games in these collections are hidden from the user.
+    blocked_collection_ids: list[str] = []
 
 
 class UserCreate(UserBase):
@@ -39,6 +42,8 @@ class UserUpdate(BaseModel):
     is_active: bool | None = None
     is_superuser: bool | None = None
     role_ids: list[str] | None = None
+    allow_restricted: bool | None = None
+    blocked_collection_ids: list[str] | None = None
 
     model_config = {
         "json_schema_extra": {

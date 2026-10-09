@@ -9,20 +9,20 @@ class FranchiseService:
     def __init__(self) -> None:
         self.repo = FranchiseRepository()
 
-    def list_items(self, db: Session, offset: int = 0, limit: int = 100, q: str | None = None) -> list[Franchise]:
-        franchises = self.repo.list_items(db, offset=offset, limit=limit, q=q)
-        counts = self.repo.count_entries_for_ids(db, [franchise.id for franchise in franchises])
+    def list_items(self, db: Session, offset: int = 0, limit: int = 100, q: str | None = None, viewer=None) -> list[Franchise]:
+        franchises = self.repo.list_items(db, offset=offset, limit=limit, q=q, viewer=viewer)
+        counts = self.repo.count_entries_for_ids(db, [franchise.id for franchise in franchises], viewer)
         for franchise in franchises:
             franchise.entry_count = counts.get(franchise.id, 0)
         return franchises
 
-    def count(self, db: Session, q: str | None = None) -> int:
-        return self.repo.count(db, q=q)
+    def count(self, db: Session, q: str | None = None, viewer=None) -> int:
+        return self.repo.count(db, q=q, viewer=viewer)
 
-    def get(self, db: Session, franchise_id: str) -> Franchise | None:
+    def get(self, db: Session, franchise_id: str, viewer=None) -> Franchise | None:
         franchise = self.repo.get(db, franchise_id)
         if franchise is not None:
-            franchise.entry_count = self.repo.count_entries_for_id(db, franchise_id)
+            franchise.entry_count = self.repo.count_entries_for_id(db, franchise_id, viewer)
         return franchise
 
     def create(self, db: Session, data: FranchiseCreate) -> Franchise:

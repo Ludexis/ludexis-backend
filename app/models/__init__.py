@@ -18,3 +18,4 @@ from app.models.screenshot import Screenshot  # noqa: F401
 from app.models.system import ScheduledTask, SystemSetting  # noqa: F401
 from app.models.tag import Tag  # noqa: F401
 from app.models.user import User  # noqa: F401
+from app.models.user_entry_flag import UserEntryFlag  # noqa: F401

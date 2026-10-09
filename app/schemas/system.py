@@ -34,8 +34,6 @@ class SettingsRead(BaseModel):
     igdb_from_env: bool
     steamgriddb_configured: bool
     steamgriddb_from_env: bool
-    vn_sources: bool
-    hidden_collections: list[str]
 
 
 class SettingsUpdate(BaseModel):
@@ -46,5 +44,3 @@ class SettingsUpdate(BaseModel):
     igdb_client_secret: str | None = None
     # Write-only: never returned by the API.
     steamgriddb_api_key: str | None = None
-    vn_sources: bool | None = None
-    hidden_collections: list[str] | None = None

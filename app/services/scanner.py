@@ -442,8 +442,8 @@ class ScannerService:
                 Path(item.file_path)
             )
     
-    def find_duplicates(self, db: Session,) -> list[dict]:
-        entries = self.repo.list_with_hashes(db)
+    def find_duplicates(self, db: Session, viewer=None) -> list[dict]:
+        entries = self.repo.list_with_hashes(db, viewer)
         grouped: dict[str, list] = {}
         for entry in entries:
             grouped.setdefault(

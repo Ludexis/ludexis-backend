@@ -10,7 +10,8 @@ from app.schemas.metadata import MetadataDetails, MetadataSearchResult
 from app.services.grouping import GroupingService
 from app.utils.normalization import company_key
 from app.services.metadata_conflict import MetadataConflictResolver
-from app.services.settings import VN_PROVIDERS, SettingsService
+from app.core.access import RESTRICTED_PROVIDERS, restricted_sources_allowed
+from app.services.settings import SettingsService
 
 from app.models.genre import Genre
 from app.models.developer import Developer
@@ -239,7 +240,9 @@ class MetadataService:
         self.refresh_archive(db, archive)
         return True
 
-    def search(self, query: str, preferred_providers: list[str] | None = None, limit: int = 20) -> list[MetadataSearchResult]:
+    def search(
+        self, query: str, preferred_providers: list[str] | None = None, limit: int = 20, allowed: list[str] | None = None
+    ) -> list[MetadataSearchResult]:
         metadata_searches_total.inc()
         logger.info(
             "Metadata search started",
@@ -251,6 +254,8 @@ class MetadataService:
         )
         results: list[MetadataSearchResult] = []
         for provider in self._get_providers(preferred_providers):
+            if allowed is not None and provider.name not in allowed:
+                continue
             provider_results = self._search_provider(provider, query, limit)
             if provider_results:
                 results.extend(provider_results)
@@ -273,8 +278,8 @@ class MetadataService:
             providers = self._match_providers(db)
         else:
             provider = self._get_provider(provider_name)
-            vn_off = provider is not None and provider.name in VN_PROVIDERS and not SettingsService().get(db, "vn_sources")
-            providers = [provider] if provider and not vn_off else []
+            blocked = provider is not None and provider.name in RESTRICTED_PROVIDERS and not restricted_sources_allowed(db)
+            providers = [provider] if provider and not blocked else []
         results = []
         for provider in providers:
             found = self._search_provider(provider, query, limit)
@@ -428,6 +433,9 @@ class MetadataService:
             archive.description = details.description
         if details.release_date:
             archive.release_date = details.release_date
+        # Sticky: a refresh that skips the source which flagged the game must not clear it; an admin can.
+        if details.restricted and not archive.restricted_locked:
+            archive.restricted = True
         archive.last_metadata_refresh = (
             datetime.now(UTC)
         )
@@ -476,6 +484,8 @@ class MetadataService:
             if match is None or score < PARTIAL_THRESHOLD:
                 return None
             provider_name, provider_id = match.provider, match.provider_id
+        if db is not None and provider_name in RESTRICTED_PROVIDERS and not restricted_sources_allowed(db):
+            return None
 
         primary = self.get_details(provider_name, provider_id)
         if primary is None:

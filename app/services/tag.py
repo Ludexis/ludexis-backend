@@ -9,20 +9,20 @@ class TagService:
     def __init__(self) -> None:
         self.repo = TagRepository()
 
-    def list_items(self, db: Session, offset: int = 0, limit: int = 100, q: str | None = None) -> list[Tag]:
-        tags = self.repo.list_items(db, offset=offset, limit=limit, q=q)
-        counts = self.repo.count_entries_for_ids(db, [tag.id for tag in tags])
+    def list_items(self, db: Session, offset: int = 0, limit: int = 100, q: str | None = None, viewer=None) -> list[Tag]:
+        tags = self.repo.list_items(db, offset=offset, limit=limit, q=q, viewer=viewer)
+        counts = self.repo.count_entries_for_ids(db, [tag.id for tag in tags], viewer)
         for tag in tags:
             tag.entry_count = counts.get(tag.id, 0)
         return tags
 
-    def count(self, db: Session, q: str | None = None) -> int:
-        return self.repo.count(db, q=q)
+    def count(self, db: Session, q: str | None = None, viewer=None) -> int:
+        return self.repo.count(db, q=q, viewer=viewer)
 
-    def get(self, db: Session, tag_id: str) -> Tag | None:
+    def get(self, db: Session, tag_id: str, viewer=None) -> Tag | None:
         tag = self.repo.get(db, tag_id)
         if tag is not None:
-            tag.entry_count = self.repo.count_entries_for_id(db, tag_id)
+            tag.entry_count = self.repo.count_entries_for_id(db, tag_id, viewer)
         return tag
 
     def create(self, db: Session, data: TagCreate) -> Tag:

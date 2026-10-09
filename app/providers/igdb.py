@@ -6,6 +6,8 @@ from app.schemas.metadata import MetadataDetails, MetadataSearchResult
 
 
 IGDB_KEYWORD_LIMIT = 10
+# IGDB theme ids that make a game restricted.
+RESTRICTED_THEME_IDS = {42}
 
 class IGDBProvider(MetadataProvider):
     name = "IGDB"
@@ -197,6 +199,7 @@ class IGDBProvider(MetadataProvider):
             banner_urls=banner_urls,
             logo_urls=logo_urls,
             artwork_urls=artwork_urls,
+            restricted=any(item.get("id") in RESTRICTED_THEME_IDS for item in game.get("themes", [])),
         )
 
     def download_artwork(

@@ -124,6 +124,7 @@ def initialize_system(data: UserCreate, db: Session = Depends(get_db)):
             "hashed_password": hashed_password,
             "is_active": True,
             "is_superuser": True,
+            "allow_restricted": True,
         },
     )
 

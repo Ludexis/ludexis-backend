@@ -3,6 +3,9 @@ import requests
 from html import unescape
 
 from app.providers.metadata_provider import MetadataProvider
+
+# Steam content descriptor ids that make a game restricted.
+RESTRICTED_DESCRIPTORS = {3, 4}
 from app.schemas.metadata import (
     MetadataDetails,
     MetadataSearchResult,
@@ -161,6 +164,7 @@ class SteamProvider(MetadataProvider):
             logo_urls=logo_urls,
             artwork_urls=artwork_urls,
             release_date=release_date,
+            restricted=bool(RESTRICTED_DESCRIPTORS & set(data.get("content_descriptors", {}).get("ids") or [])),
         )
 
     def download_artwork(self, external_id: str,) -> bytes | None:

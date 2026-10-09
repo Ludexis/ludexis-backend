@@ -28,8 +28,8 @@ def list_tags(
     limit: int = 100,
     q: str | None = None,
 ):
-    items = service.list_items(db, offset=offset, limit=limit, q=q)
-    response.headers["X-Total-Count"] = str(service.count(db, q=q))
+    items = service.list_items(db, offset=offset, limit=limit, q=q, viewer=current_user)
+    response.headers["X-Total-Count"] = str(service.count(db, q=q, viewer=current_user))
     return items
 
 
@@ -45,7 +45,7 @@ def read_tag(
     current_user=Depends(get_current_active_user),
     db: Session = Depends(get_db),
 ):
-    tag = service.get(db, tag_id)
+    tag = service.get(db, tag_id, current_user)
     if tag is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Tag not found")
     return tag

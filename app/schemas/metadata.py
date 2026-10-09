@@ -28,3 +28,5 @@ class MetadataDetails(BaseModel):
     banner_urls: list[str] = []
     logo_urls: list[str] = []
     artwork_urls: list[str] = []
+    # The source rates the game for restricted audiences only.
+    restricted: bool = False

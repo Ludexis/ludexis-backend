@@ -92,6 +92,9 @@ def create_user(
         "hashed_password": hashed_password,
         "is_active": True if not initialized else data.is_active,
         "is_superuser": True if not initialized else data.is_superuser,
+        # The first account owns the server and sees everything.
+        "allow_restricted": True if not initialized else data.allow_restricted,
+        "blocked_collection_ids": data.blocked_collection_ids if initialized else [],
     })
 
     if initialized and data.role_ids:
@@ -191,6 +194,12 @@ def update_user(
 
     if data.is_superuser is not None:
         user.is_superuser = data.is_superuser
+
+    if data.allow_restricted is not None:
+        user.allow_restricted = data.allow_restricted
+
+    if data.blocked_collection_ids is not None:
+        user.blocked_collection_ids = list(dict.fromkeys(data.blocked_collection_ids))
 
     if data.role_ids is not None:
         new_roles = _load_roles(db, data.role_ids)

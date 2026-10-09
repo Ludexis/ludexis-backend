@@ -48,6 +48,8 @@ class MetadataConflictResolver:
 
             franchises=primary.franchises or secondary.franchises,
 
+            restricted=primary.restricted or secondary.restricted,
+
             cover_urls=list(
                 dict.fromkeys(
                     primary.cover_urls

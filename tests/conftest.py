@@ -62,6 +62,7 @@ def setup_database():
         ),
         is_active=True,
         is_superuser=True,
+        allow_restricted=True,
     )
 
     admin_user.roles.append(admin_role)

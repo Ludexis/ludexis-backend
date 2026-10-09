@@ -10,6 +10,7 @@ from app.schemas.artwork import (
     ArtworkReplaceResponse,
     ArtworkUploadResponse,
 )
+from app.core.access import acting_as
 from app.services.artwork import ArtworkService
 from app.services.audit import AuditService
 from app.utils.audit_actions import AuditAction
@@ -85,7 +86,8 @@ def list_artwork_candidates(
     db: Session = Depends(get_db),
 ):
     try:
-        return service.artwork_candidates(db, archive_entry_id, artwork_type)
+        with acting_as(current_user.id):
+            return service.artwork_candidates(db, archive_entry_id, artwork_type)
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
 

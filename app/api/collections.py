@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
-from app.core.auth import get_current_active_user, require_permission
+from app.core.auth import ensure_permission, get_current_active_user, require_permission
 from app.db.session import get_db
 from app.schemas.collection import CollectionCreate, CollectionEntryRequest, CollectionRead, CollectionUpdate
 from app.services.audit import AuditService
@@ -26,9 +26,12 @@ def list_collections(
     offset: int = 0,
     limit: int = 100,
     q: str | None = None,
-    include_hidden: bool = Query(False, description="Also list collections hidden in the server settings"),
+    all: bool = Query(False, description="Every collection, including ones blocked for the current user (needs Manage users)"),
 ):
-    return service.list_items(db, offset=offset, limit=limit, q=q, include_hidden=include_hidden)
+    if all:
+        ensure_permission(current_user, PermissionName.MANAGE_USERS)
+    viewer = None if all else current_user
+    return service.read(db, service.list_items(db, offset=offset, limit=limit, q=q, viewer=viewer), viewer)
 
 
 @router.get(
@@ -43,10 +46,10 @@ def read_collection(
     current_user=Depends(get_current_active_user),
     db: Session = Depends(get_db),
 ):
-    collection = service.get(db, collection_id)
+    collection = service.get(db, collection_id, current_user)
     if collection is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Collection not found")
-    return collection
+    return service.read(db, [collection], current_user)[0]
 
 
 @router.post(
@@ -72,7 +75,7 @@ def create_collection(
             entity_id=collection.id,
             details=f"Created collection {collection.name}",
         )
-        return collection
+        return service.read(db, [collection], current_user)[0]
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
 
@@ -90,7 +93,7 @@ def update_collection(
     current_user=Depends(require_permission(PermissionName.MANAGE_COLLECTIONS)),
     db: Session = Depends(get_db),
 ):
-    collection = service.get(db, collection_id)
+    collection = service.get(db, collection_id, current_user)
     if collection is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Collection not found")
     try:
@@ -103,7 +106,7 @@ def update_collection(
             entity_id=updated.id,
             details=f"Updated collection {updated.name}",
         )
-        return updated
+        return service.read(db, [updated], current_user)[0]
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
 
@@ -120,7 +123,7 @@ def delete_collection(
     current_user=Depends(require_permission(PermissionName.MANAGE_COLLECTIONS)),
     db: Session = Depends(get_db),
 ):
-    collection = service.get(db, collection_id)
+    collection = service.get(db, collection_id, current_user)
     if collection is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Collection not found")
     service.delete(db, collection)
@@ -147,7 +150,7 @@ def add_entry_to_collection(
     current_user=Depends(require_permission(PermissionName.MANAGE_COLLECTIONS)),
     db: Session = Depends(get_db),
 ):
-    collection = service.get(db, collection_id)
+    collection = service.get(db, collection_id, current_user)
     if collection is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Collection not found")
     try:
@@ -160,7 +163,7 @@ def add_entry_to_collection(
             entity_id=updated.id,
             details=f"Added entry {data.entry_id} to collection {updated.name}",
         )
-        return updated
+        return service.read(db, [updated], current_user)[0]
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
 
@@ -178,7 +181,7 @@ def remove_entry_from_collection(
     current_user=Depends(require_permission(PermissionName.MANAGE_COLLECTIONS)),
     db: Session = Depends(get_db),
 ):
-    collection = service.get(db, collection_id)
+    collection = service.get(db, collection_id, current_user)
     if collection is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Collection not found")
     try:
@@ -191,6 +194,6 @@ def remove_entry_from_collection(
             entity_id=updated.id,
             details=f"Removed entry {entry_id} from collection {updated.name}",
         )
-        return updated
+        return service.read(db, [updated], current_user)[0]
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc

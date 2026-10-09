@@ -82,24 +82,52 @@ def test_genres_lists_names_with_entry_counts():
     assert {"name": genre, "entry_count": 3} in genres
 
 
-def test_hidden_collections_leave_listings_but_keep_their_own_page():
-    word, _genre, collection, collection_id = seed_entries()
-    headers = auth_headers()
-    try:
-        assert client.patch("/api/admin/settings", json={"hidden_collections": [collection_id]}, headers=headers).status_code == 200
+def viewer_headers(admin: dict, **access) -> tuple[str, dict]:
+    """A new account with the given access; returns (user id, its headers)."""
+    name = f"viewer_{uuid.uuid4().hex[:10]}"
+    payload = {"username": name, "email": f"{name}@example.com", "password": "P@ssw0rd!123", **access}
+    user = client.post("/api/users/", json=payload, headers=admin).json()
+    token = client.post("/api/auth/login", json={"username": name, "password": "P@ssw0rd!123"}).json()["access_token"]
+    return user["id"], {"Authorization": f"Bearer {token}"}
 
-        assert titles(client.get("/api/search/", params={"q": word}, headers=headers)) == ["c"]
-        own_page = client.get("/api/search/", params={"collection_id": collection_id}, headers=headers)
-        assert titles(own_page) == ["A", "b"]
-        everything = client.get("/api/search/", params={"q": word, "include_hidden": True}, headers=headers)
-        assert titles(everything) == ["A", "b", "c"]
 
-        listed = [item["name"] for item in client.get("/api/collections/", params={"q": word}, headers=headers).json()]
-        assert listed == []
-        with_hidden = client.get("/api/collections/", params={"q": word, "include_hidden": True}, headers=headers).json()
-        assert [item["name"] for item in with_hidden] == [collection]
-    finally:
-        client.patch("/api/admin/settings", json={"hidden_collections": []}, headers=headers)
+def test_user_access_hides_restricted_games_and_blocked_collections_everywhere():
+    word, genre, _collection, collection_id = seed_entries()
+    admin = auth_headers()
+    games = {game["title"].split()[0]: game["id"] for game in client.get("/api/search/", params={"q": word}, headers=admin).json()}
+    assert client.patch(f"/api/archive-entries/{games['c']}", json={"restricted": True}, headers=admin).json()["restricted_locked"]
+
+    user_id, viewer = viewer_headers(admin, blocked_collection_ids=[collection_id])
+    # A and b sit in the blocked collection, c is restricted: nothing is left for this user.
+    assert titles(client.get("/api/search/", params={"q": word}, headers=viewer)) == []
+    assert client.get(f"/api/archive-entries/{games['c']}", headers=viewer).status_code == 404
+    assert client.get(f"/api/collections/{collection_id}", headers=viewer).status_code == 404
+    assert client.get("/api/collections/", params={"q": word}, headers=viewer).json() == []
+    assert client.get("/api/collections/", params={"all": True}, headers=viewer).status_code == 403
+    assert {"name": genre, "entry_count": 3} in client.get("/api/genres/", headers=admin).json()
+
+    assert client.patch(f"/api/users/{user_id}", json={"allow_restricted": True, "blocked_collection_ids": []}, headers=admin).status_code == 200
+    assert titles(client.get("/api/search/", params={"q": word}, headers=viewer)) == ["A", "b", "c"]
+    listed = client.get("/api/collections/", params={"q": word}, headers=viewer).json()
+    assert [len(item["entry_ids"]) for item in listed] == [2]
+
+
+def test_favourite_and_completed_marks_belong_to_each_user():
+    word, *_ = seed_entries()
+    admin = auth_headers()
+    _user_id, viewer = viewer_headers(admin)
+    first = client.get("/api/search/", params={"q": word}, headers=admin).json()[0]
+    assert (first["is_favorite"], first["is_completed"]) == (False, False)
+
+    marked = client.put(f"/api/archive-entries/{first['id']}/flags", json={"is_favorite": True}, headers=admin)
+    assert marked.json() == {"is_favorite": True, "is_completed": False}
+    client.put(f"/api/archive-entries/{first['id']}/flags", json={"is_completed": True}, headers=admin)
+
+    favourites = client.get("/api/search/", params={"q": word, "favorite": True}, headers=admin)
+    assert [game["id"] for game in favourites.json()] == [first["id"]]
+    assert favourites.json()[0]["is_completed"] is True
+    assert client.get("/api/search/", params={"q": word, "favorite": True}, headers=viewer).json() == []
+    assert client.get(f"/api/archive-entries/{first['id']}", headers=viewer).json()["is_favorite"] is False
 
 
 def test_review_resolved_filters_the_review_queue():

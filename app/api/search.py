@@ -4,8 +4,8 @@ from sqlalchemy.orm import Session
 from app.core.auth import get_current_active_user
 from app.db.session import get_db
 from app.schemas.archive_entry import ArchiveEntryRead
+from app.core.access import annotate_flags
 from app.services.search import SearchService
-from app.services.settings import SettingsService
 
 router = APIRouter(prefix="/search", tags=["search"])
 service = SearchService()
@@ -32,7 +32,8 @@ def search_archive_entries(
     verification_status: str | None = Query(None, description="Verification status filter", examples=["VERIFIED"]),
     storage_device: str | None = Query(None, description="Storage device filter", examples=["NAS-01"]),
     group_versions: bool = Query(False, description="Return one entry per game, with version_count set"),
-    include_hidden: bool = Query(False, description="Include games in collections hidden in the server settings"),
+    favorite: bool | None = Query(None, description="Only games the current user marked favourite (true) or did not (false)"),
+    completed: bool | None = Query(None, description="Only games the current user marked completed (true) or did not (false)"),
     review_resolved: bool | None = Query(None, description="Only games dismissed from (true) or still in (false) the review queue"),
     sort: str = Query(
         "title",
@@ -59,7 +60,9 @@ def search_archive_entries(
         storage_device=storage_device,
         group_versions=group_versions,
         review_resolved=review_resolved,
-        hidden_collection_ids=[] if include_hidden else SettingsService().get(db, "hidden_collections"),
+        viewer=current_user,
+        favorite=favorite,
+        completed=completed,
     )
     response.headers["X-Total-Count"] = str(service.count(db, **filters))
-    return service.search(db, sort=sort, offset=offset, limit=limit, **filters)
+    return annotate_flags(db, current_user, service.search(db, sort=sort, offset=offset, limit=limit, **filters))

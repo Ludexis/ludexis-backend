@@ -15,24 +15,26 @@ from app.models.franchise import Franchise
 from app.models.genre import Genre
 from app.models.publisher import Publisher
 from app.models.tag import Tag
+from app.models.user import User
 from app.repositories.base import BaseRepository
+from app.core.access import entry_filters, flagged_ids
 
 
 class ArchiveEntryRepository(BaseRepository[ArchiveEntry]):
     def __init__(self) -> None:
         super().__init__(ArchiveEntry)
 
-    def list_active(self, db: Session, offset: int = 0, limit: int | None = 100) -> list[ArchiveEntry]:
+    def list_active(self, db: Session, offset: int = 0, limit: int | None = 100, viewer: User | None = None) -> list[ArchiveEntry]:
         return (
             db.query(ArchiveEntry)
-            .filter(ArchiveEntry.deleted_at.is_(None))
+            .filter(ArchiveEntry.deleted_at.is_(None), *entry_filters(viewer))
             .offset(offset)
             .limit(limit)
             .all()
         )
 
-    def get_active(self, db: Session, id: str) -> ArchiveEntry | None:
-        return db.query(ArchiveEntry).filter(ArchiveEntry.id == id, ArchiveEntry.deleted_at.is_(None)).one_or_none()
+    def get_active(self, db: Session, id: str, viewer: User | None = None) -> ArchiveEntry | None:
+        return db.query(ArchiveEntry).filter(ArchiveEntry.id == id, ArchiveEntry.deleted_at.is_(None), *entry_filters(viewer)).one_or_none()
 
     def get_by_file_path(self, db: Session, file_path: str) -> ArchiveEntry | None:
         return db.query(ArchiveEntry).filter(ArchiveEntry.file_path == file_path, ArchiveEntry.deleted_at.is_(None)).one_or_none()
@@ -115,17 +117,19 @@ class ArchiveEntryRepository(BaseRepository[ArchiveEntry]):
         verification_status: str | None = None,
         storage_device: str | None = None,
         group_versions: bool = False,
-        hidden_collection_ids: list[str] | None = None,
         review_resolved: bool | None = None,
+        viewer: User | None = None,
+        favorite: bool | None = None,
+        completed: bool | None = None,
     ) -> list:
-        filters = [ArchiveEntry.deleted_at.is_(None)]
+        filters = [ArchiveEntry.deleted_at.is_(None), *entry_filters(viewer)]
         if group_versions:
             filters.append(ArchiveEntry.is_primary_version.is_(True))
 
-        # Games in a hidden collection stay out of every listing except that collection's own page.
-        hidden = [collection for collection in hidden_collection_ids or [] if collection != collection_id]
-        if hidden:
-            filters.append(~ArchiveEntry.collections.any(Collection.id.in_(hidden)))
+        for flag, wanted in (("favorite", favorite), ("completed", completed)):
+            if wanted is not None and viewer is not None:
+                marked = ArchiveEntry.id.in_(flagged_ids(viewer, flag))
+                filters.append(marked if wanted else ~marked)
 
         if query:
             search_value = f"%{query}%"
@@ -207,24 +211,26 @@ class ArchiveEntryRepository(BaseRepository[ArchiveEntry]):
         )
         return dict(rows)
 
-    def list_versions(self, db: Session, entry: ArchiveEntry) -> list[ArchiveEntry]:
+    def list_versions(self, db: Session, entry: ArchiveEntry, viewer: User | None = None) -> list[ArchiveEntry]:
         if not entry.group_key:
             return [entry]
         return (
             db.query(ArchiveEntry)
-            .filter(ArchiveEntry.group_key == entry.group_key, ArchiveEntry.deleted_at.is_(None))
+            .filter(ArchiveEntry.group_key == entry.group_key, ArchiveEntry.deleted_at.is_(None), *entry_filters(viewer))
             .all()
         )
 
     def list_with_hashes(
         self,
         db: Session,
+        viewer: User | None = None,
     ) -> list[ArchiveEntry]:
         return (
             db.query(ArchiveEntry)
             .filter(
                 ArchiveEntry.deleted_at.is_(None),
                 ArchiveEntry.file_hash.is_not(None),
+                *entry_filters(viewer),
             )
             .all()
         )

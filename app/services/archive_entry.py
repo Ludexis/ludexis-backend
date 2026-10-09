@@ -19,11 +19,11 @@ class ArchiveEntryService:
         self.collection_repo = CollectionRepository()
         self.franchise_repo = FranchiseRepository()
 
-    def list_entries(self, db: Session, offset: int = 0, limit: int = 100) -> list[ArchiveEntry]:
-        return self.repo.list_active(db, offset=offset, limit=limit)
+    def list_entries(self, db: Session, offset: int = 0, limit: int = 100, viewer=None) -> list[ArchiveEntry]:
+        return self.repo.list_active(db, offset=offset, limit=limit, viewer=viewer)
 
-    def get(self, db: Session, entry_id: str) -> ArchiveEntry | None:
-        return self.repo.get_active(db, entry_id)
+    def get(self, db: Session, entry_id: str, viewer=None) -> ArchiveEntry | None:
+        return self.repo.get_active(db, entry_id, viewer)
 
     def create(self, db: Session, data: ArchiveEntryCreate) -> ArchiveEntry:
         entry_data = data.model_dump(exclude={"tag_ids", "developer_ids", "publisher_ids", "collection_ids", "related_entry_ids"})
@@ -33,6 +33,8 @@ class ArchiveEntryService:
 
     def update(self, db: Session, entry: ArchiveEntry, data: ArchiveEntryUpdate) -> ArchiveEntry:
         update_data = data.model_dump(exclude={"tag_ids", "developer_ids", "publisher_ids", "collection_ids", "related_entry_ids"}, exclude_unset=True)
+        if update_data.get("restricted") is not None:
+            update_data["restricted_locked"] = True
         entry = self.repo.update(db, entry, update_data)
         self._assign_relations(db, entry, data)
         return entry

@@ -188,14 +188,14 @@ def test_interactive_search_with_a_developer_lists_that_developers_games_first()
     assert [result.provider_id for result in service.search_providers(None, "Quiet Meadow", "all")] == ["1"]
 
 
-def test_vndb_is_matched_only_while_visual_novel_sources_are_on():
+def test_vndb_is_matched_only_for_users_allowed_restricted_sources():
     from unittest.mock import patch
 
     from app.services.settings import SettingsService
 
-    stored = {"provider_order": ["VNDB", "IGDB", "Steam"], "vn_sources": False}
-    with patch.object(SettingsService, "get", lambda self, db, key: stored[key]):
+    allowed = {"value": False}
+    with patch.object(SettingsService, "get", lambda self, db, key: ["VNDB", "IGDB", "Steam"]),             patch("app.services.settings.restricted_sources_allowed", lambda db: allowed["value"]),             patch("app.services.metadata.restricted_sources_allowed", lambda db: allowed["value"]):
         assert SettingsService().match_providers(None) == ["IGDB", "Steam"]
         assert MetadataService().search_providers(None, "Quiet Meadow", "VNDB") == []
-        stored["vn_sources"] = True
+        allowed["value"] = True
         assert SettingsService().match_providers(None) == ["VNDB", "IGDB", "Steam"]

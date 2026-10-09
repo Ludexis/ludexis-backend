@@ -5,6 +5,7 @@ from app.core.auth import get_current_active_user
 from app.core.dependencies import get_metadata_service
 from app.db.session import get_db
 from app.schemas.metadata import MetadataDetails, MetadataSearchResult
+from app.core.access import RESTRICTED_PROVIDERS, acting_as, restricted_sources_allowed
 from app.services.metadata import MetadataService
 from app.services.settings import SettingsService
 
@@ -40,9 +41,10 @@ def search_metadata(
     metadata_service: MetadataService = Depends(get_metadata_service),
     db: Session = Depends(get_db),
 ):
-    if provider:
-        return metadata_service.search_providers(db, q, provider, developer=developer.strip() if developer else None)
-    return metadata_service.search(q, preferred_providers=provider_priority)
+    with acting_as(current_user.id):
+        if provider:
+            return metadata_service.search_providers(db, q, provider, developer=developer.strip() if developer else None)
+        return metadata_service.search(q, preferred_providers=provider_priority, allowed=SettingsService().match_providers(db))
 
 
 @router.get(
@@ -56,7 +58,8 @@ def list_match_providers(
     current_user=Depends(get_current_active_user),
     db: Session = Depends(get_db),
 ):
-    return SettingsService().match_providers(db)
+    with acting_as(current_user.id):
+        return SettingsService().match_providers(db)
 
 
 @router.get(
@@ -71,7 +74,11 @@ def read_metadata_details(
     provider_id: str,
     current_user=Depends(get_current_active_user),
     metadata_service: MetadataService = Depends(get_metadata_service),
+    db: Session = Depends(get_db),
 ):
+    with acting_as(current_user.id):
+        if provider_name in RESTRICTED_PROVIDERS and not restricted_sources_allowed(db):
+            raise HTTPException(status_code=404, detail="Metadata not found")
     details = metadata_service.get_details(provider_name, provider_id)
     if details is None:
         raise HTTPException(status_code=404, detail="Metadata not found")

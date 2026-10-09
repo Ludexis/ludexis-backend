@@ -14,6 +14,7 @@ from app.repositories.screenshot import ScreenshotRepository
 from app.services.storage import StorageService
 from app.schemas.metadata import MetadataDetails
 from app.services.metadata import MetadataService
+from app.core.access import restricted_sources_allowed
 from app.services.settings import SettingsService
 from app.providers.steamgriddb import SteamGridDBClient
 from app.utils.normalization import title_key
@@ -67,7 +68,7 @@ class ArtworkService:
         api_key = settings_service.steamgriddb_key(db)
         if not api_key:
             return
-        client = SteamGridDBClient(api_key, all_ratings=settings_service.get(db, "vn_sources"))
+        client = SteamGridDBClient(api_key, all_ratings=restricted_sources_allowed(db))
         year = details.release_date.year if details.release_date else None
         try:
             same_name = [game for game in client.search(details.title) if title_key(game["name"]) == title_key(details.title)]

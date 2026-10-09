@@ -9,20 +9,20 @@ class PublisherService:
     def __init__(self) -> None:
         self.repo = PublisherRepository()
 
-    def list_items(self, db: Session, offset: int = 0, limit: int = 100, q: str | None = None) -> list[Publisher]:
-        publishers = self.repo.list_items(db, offset=offset, limit=limit, q=q)
-        counts = self.repo.count_entries_for_ids(db, [publisher.id for publisher in publishers])
+    def list_items(self, db: Session, offset: int = 0, limit: int = 100, q: str | None = None, viewer=None) -> list[Publisher]:
+        publishers = self.repo.list_items(db, offset=offset, limit=limit, q=q, viewer=viewer)
+        counts = self.repo.count_entries_for_ids(db, [publisher.id for publisher in publishers], viewer)
         for publisher in publishers:
             publisher.entry_count = counts.get(publisher.id, 0)
         return publishers
 
-    def count(self, db: Session, q: str | None = None) -> int:
-        return self.repo.count(db, q=q)
+    def count(self, db: Session, q: str | None = None, viewer=None) -> int:
+        return self.repo.count(db, q=q, viewer=viewer)
 
-    def get(self, db: Session, publisher_id: str) -> Publisher | None:
+    def get(self, db: Session, publisher_id: str, viewer=None) -> Publisher | None:
         publisher = self.repo.get(db, publisher_id)
         if publisher is not None:
-            publisher.entry_count = self.repo.count_entries_for_id(db, publisher_id)
+            publisher.entry_count = self.repo.count_entries_for_id(db, publisher_id, viewer)
         return publisher
 
     def create(self, db: Session, data: PublisherCreate) -> Publisher:

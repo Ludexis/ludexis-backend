@@ -4,9 +4,10 @@ from sqlalchemy.orm import Session
 from app.core.auth import get_current_active_user, require_permission
 from app.db.session import get_db
 from app.schemas.archive_entry import (
-    ArchiveEntryCreate, ArchiveEntryRead, ArchiveEntryUpdate, ArchiveIdentifyRequest, ArchiveIdentifyResult, ArchiveLocationResult, ArchiveMetadataUpdate,
+    ArchiveEntryCreate, ArchiveEntryFlags, ArchiveEntryFlagsUpdate, ArchiveEntryRead, ArchiveEntryUpdate, ArchiveIdentifyRequest, ArchiveIdentifyResult, ArchiveLocationResult, ArchiveMetadataUpdate,
 )
 from app.schemas.screenshot import ScreenshotRead
+from app.core.access import RESTRICTED_PROVIDERS, acting_as, annotate_flags, restricted_sources_allowed, set_flags
 from app.services.archive_entry import ArchiveEntryService
 from app.services.audit import AuditService
 from app.utils.enums import PermissionName
@@ -42,7 +43,7 @@ def list_archive_entries(
     offset: int = 0,
     limit: int = 100,
 ):
-    return service.list_entries(db, offset=offset, limit=limit)
+    return annotate_flags(db, current_user, service.list_entries(db, offset=offset, limit=limit, viewer=current_user))
 
 @router.get(
     "/duplicates",
@@ -54,9 +55,7 @@ def list_duplicates(
     current_user=Depends(get_current_active_user),
     db: Session = Depends(get_db),
 ):
-    duplicates = scanner_service.find_duplicates(db)
-
-    return duplicates
+    return scanner_service.find_duplicates(db, viewer=current_user)
 
 @router.get(
     "/{archive_entry_id}/screenshots",
@@ -69,7 +68,7 @@ def list_screenshots(
     current_user=Depends(get_current_active_user),
     db: Session = Depends(get_db),
 ):
-    entry = service.get(db, archive_entry_id)
+    entry = service.get(db, archive_entry_id, current_user)
     if entry is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Archive entry not found")
     return screenshot_repo.list_by_entry(db, archive_entry_id)
@@ -86,10 +85,10 @@ def list_versions(
     current_user=Depends(get_current_active_user),
     db: Session = Depends(get_db),
 ):
-    entry = service.get(db, archive_entry_id)
+    entry = service.get(db, archive_entry_id, current_user)
     if entry is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Archive entry not found")
-    versions = service.repo.list_versions(db, entry)
+    versions = annotate_flags(db, current_user, service.repo.list_versions(db, entry, viewer=current_user))
     return sorted(versions, key=lambda e: version_order(e.version), reverse=True)
 
 
@@ -105,10 +104,31 @@ def read_archive_entry(
     current_user=Depends(get_current_active_user),
     db: Session = Depends(get_db),
 ):
-    entry = service.get(db, archive_entry_id)
+    entry = service.get(db, archive_entry_id, current_user)
     if entry is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Archive entry not found")
-    return entry
+    return annotate_flags(db, current_user, [entry])[0]
+
+
+@router.put(
+    "/{archive_entry_id}/flags",
+    response_model=ArchiveEntryFlags,
+    summary="Mark favourite or completed",
+    description="Set the current user's favourite and completed marks on a game; omitted fields keep their value.",
+)
+def set_archive_flags(
+    archive_entry_id: str,
+    data: ArchiveEntryFlagsUpdate,
+    current_user=Depends(get_current_active_user),
+    db: Session = Depends(get_db),
+):
+    entry = service.get(db, archive_entry_id, current_user)
+    if entry is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Archive entry not found")
+    # Versions of a game share one library card, so they share the marks too.
+    versions = [entry] + [version for version in service.repo.list_versions(db, entry, viewer=current_user) if version.id != entry.id]
+    flag = set_flags(db, current_user, versions, data.is_favorite, data.is_completed)
+    return {"is_favorite": flag.favorite, "is_completed": flag.completed}
 
 
 @router.post(
@@ -152,7 +172,7 @@ def update_archive_entry(
     current_user=Depends(require_permission(PermissionName.EDIT_METADATA)),
     db: Session = Depends(get_db),
 ):
-    entry = service.get(db, archive_entry_id)
+    entry = service.get(db, archive_entry_id, current_user)
     if entry is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Archive entry not found")
     try:
@@ -186,10 +206,7 @@ def override_archive_metadata(
     ),
     db: Session = Depends(get_db),
 ):
-    entry = service.get(
-        db,
-        archive_entry_id,
-    )
+    entry = service.get(db, archive_entry_id, current_user)
 
     if entry is None:
         raise HTTPException(
@@ -228,10 +245,13 @@ def identify_archive_entry(
     current_user=Depends(require_permission(PermissionName.EDIT_METADATA)),
     db: Session = Depends(get_db),
 ):
-    entry = service.get(db, archive_entry_id)
+    entry = service.get(db, archive_entry_id, current_user)
     if entry is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Archive entry not found")
-    updated = MetadataService().identify(db, entry, data.provider, data.provider_id)
+    with acting_as(current_user.id):
+        if data.provider in RESTRICTED_PROVIDERS and not restricted_sources_allowed(db):
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Provider not available to this account")
+        updated = MetadataService().identify(db, entry, data.provider, data.provider_id)
     if updated is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Provider record not found")
     job = JobService().start_job(
@@ -259,7 +279,7 @@ def open_archive_location(
     current_user=Depends(require_permission(PermissionName.ACCESS_ADMIN)),
     db: Session = Depends(get_db),
 ):
-    entry = service.get(db, archive_entry_id)
+    entry = service.get(db, archive_entry_id, current_user)
     if entry is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Archive entry not found")
     path = Path(entry.file_path)
@@ -280,7 +300,7 @@ def delete_archive_entry(
     current_user=Depends(require_permission(PermissionName.EDIT_METADATA)),
     db: Session = Depends(get_db),
 ):
-    entry = service.get(db, archive_entry_id)
+    entry = service.get(db, archive_entry_id, current_user)
     if entry is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Archive entry not found")
     service.delete(db, entry)

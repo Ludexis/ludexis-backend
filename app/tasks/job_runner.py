@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 from app.core.config import settings
 from app.db.session import SessionLocal
 from app.repositories.job_history import JobHistoryRepository
+from app.core.access import acting_as
 from app.services.scanner import ProgressCallback
 from app.utils.enums import JobStatus
 
@@ -49,7 +50,9 @@ def run_job(task, job_history_id: str, label: str, work: JobWork) -> str:
                 job.progress = percent
                 db.commit()
 
-        stats = work(db, report, job.id)
+        # The work runs with the starting user's access, which decides the metadata sources it may use.
+        with acting_as(job.user_id):
+            stats = work(db, report, job.id)
 
         if stats.get("cancelled"):
             job.status = JobStatus.CANCELED
