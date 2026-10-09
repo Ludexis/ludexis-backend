@@ -54,6 +54,12 @@ class ArchiveEntryRepository(BaseRepository[ArchiveEntry]):
             .first()
         )
 
+    def was_deleted(self, db: Session, file_path: str, library_id: str | None, relative_path: str | None) -> bool:
+        same_place = ArchiveEntry.file_path == file_path
+        if library_id and relative_path:
+            same_place = sa.or_(same_place, sa.and_(ArchiveEntry.library_id == library_id, ArchiveEntry.relative_path == relative_path))
+        return db.query(db.query(ArchiveEntry).filter(same_place, ArchiveEntry.deleted_at.is_not(None)).exists()).scalar()
+
     def list_in_library(self, db: Session, library_id: str) -> list[ArchiveEntry]:
         return db.query(ArchiveEntry).filter(ArchiveEntry.library_id == library_id, ArchiveEntry.deleted_at.is_(None)).all()
 

@@ -151,3 +151,21 @@ def test_failing_file_does_not_abort_scan(tmp_path, monkeypatch):
     assert result["errors"] == 1
     assert progress[-1] == (3, 3)
     db.close()
+
+
+def test_deleted_entry_stays_deleted_and_keeps_its_file(tmp_path):
+    from app.repositories.archive_entry import ArchiveEntryRepository
+
+    db = TestingSessionLocal()
+    archive = tmp_path / f"{uuid.uuid4()}.rar"
+    archive.write_bytes(uuid.uuid4().hex.encode())
+    scanner = ScannerService()
+    first = scanner.scan_full(db, scan_root=str(tmp_path))
+    repo = ArchiveEntryRepository()
+    repo.delete(db, repo.get(db, first["created_ids"][0]))
+
+    again = scanner.scan_full(db, scan_root=str(tmp_path))
+    assert archive.exists()
+    assert again["created"] == 0
+    assert again["ignored_deleted"] == 1
+    db.close()

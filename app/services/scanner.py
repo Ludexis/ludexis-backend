@@ -174,6 +174,7 @@ class ScannerService:
             "created": 0,
             "updated": 0,
             "moved": 0,
+            "ignored_deleted": 0,
             "errors": 0,
             "cancelled": False,
             "created_ids": [],
@@ -361,8 +362,11 @@ class ScannerService:
             )
             missing_hash = existing.file_hash is None and item.archive_type != SUPPORTED_FOLDER_TYPE
             if not (changed or missing_hash):
-                if item.relative_path and existing.relative_path != item.relative_path:
-                    self.repo.update(db, existing, {"relative_path": item.relative_path})
+                # A re-added library gets a new id; its entries follow it.
+                relink = {"relative_path": item.relative_path, "library_id": library_id}
+                relink = {key: value for key, value in relink.items() if value and getattr(existing, key) != value}
+                if relink:
+                    self.repo.update(db, existing, relink)
                 return
             self._ensure_file_hash(item)
             update = {
@@ -370,11 +374,17 @@ class ScannerService:
                 "modified_time": item.modified_time,
                 "file_hash": item.file_hash,
                 "relative_path": item.relative_path or existing.relative_path,
+                "library_id": library_id or existing.library_id,
             }
             if changed:
                 update["verification_status"] = VerificationStatus.UNKNOWN
             self.repo.update(db, existing, update)
             stats["updated"] += 1
+            return
+
+        # A game the user deleted stays deleted; its files on disk were never touched.
+        if self.repo.was_deleted(db, item.file_path, library_id, item.relative_path):
+            stats["ignored_deleted"] += 1
             return
 
         # Same place inside the library under a new root (re-pointed library, new drive letter):
