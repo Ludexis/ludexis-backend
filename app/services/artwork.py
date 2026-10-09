@@ -17,6 +17,7 @@ from app.services.metadata import MetadataService
 from app.core.access import restricted_sources_allowed
 from app.services.settings import SettingsService
 from app.providers.steamgriddb import SteamGridDBClient
+from app.utils.cover_fit import content_ratio, fit_cover
 from app.utils.normalization import title_key
 from app.utils.artwork import ArtworkType, build_artwork_relative_path, is_allowed_artwork_mime_type
 from app.utils.enums import MetadataStatus
@@ -218,11 +219,16 @@ class ArtworkService:
                 artwork_url
             )
         )
+        # With no portrait art on offer, the best image is cropped to the card; a new name keeps
+        # browsers from showing the old file they cached.
+        fitted = fit_cover(contents)
         relative_path = (
             f"covers/"
             f"{entry.id}"
+            f"{'-card' if fitted else ''}"
             f"{extension}"
         )
+        contents = fitted or contents
         stored_path = (
             self.storage.save(
                 relative_path,
@@ -631,9 +637,13 @@ class ArtworkService:
             contents, extension = self._download_artwork_url(url)
         except requests.RequestException as exc:
             raise ValueError("The image could not be downloaded") from exc
+        fitted = fit_cover(contents) if artwork_type == ArtworkType.COVER else None
+        contents = fitted or contents
         asset_field = f"{artwork_type.value}_path"
         existing_path = getattr(entry, asset_field, None)
-        stored_path = self.storage.save(build_artwork_relative_path(entry.id, artwork_type, f"art{extension}"), contents)
+        stored_path = self.storage.save(
+            build_artwork_relative_path(entry.id, artwork_type, f"art{'-card' if fitted else ''}{extension}"), contents
+        )
         if existing_path and existing_path != stored_path:
             self.storage.delete(existing_path)
         setattr(entry, asset_field, stored_path)
@@ -794,8 +804,28 @@ class ArtworkService:
             "incomplete": sum(1 for item in validation if not item["complete"]),
             "repaired": repaired,
             "failed": failed,
+            "covers_fitted": self.fit_stored_covers(db),
             "unused_removed": self.garbage_collect_artwork(db)["deleted"],
         }
+
+    def fit_stored_covers(self, db: Session) -> int:
+        """Crops saved covers that do not fit the library card; returns how many changed."""
+        fitted_count = 0
+        for entry in self.entry_repo.list_active(db, limit=None):
+            if not entry.cover_path or not self.storage.exists(entry.cover_path):
+                continue
+            fitted = fit_cover(self.storage.absolute_path(entry.cover_path).read_bytes())
+            if fitted is None:
+                continue
+            old_path = entry.cover_path
+            stem, dot, extension = old_path.rpartition(".")
+            entry.cover_path = self.storage.save(f"{stem}-card{dot}{extension}", fitted)
+            if entry.cover_path != old_path:
+                self.storage.delete(old_path)
+            db.add(entry)
+            db.commit()
+            fitted_count += 1
+        return fitted_count
 
     def _score_image(self, contents: bytes, shape: str | None = None) -> int:
         score = 0
@@ -808,7 +838,8 @@ class ArtworkService:
                     score += 50
                 if height >= 500:
                     score += 50
-                if shape == "portrait" and height > width:
+                # Judged on the picture inside any padding bars: landscape art padded to portrait is not a cover.
+                if shape == "portrait" and (content_ratio(contents) or width / height) < 1:
                     score += SHAPE_BONUS
                 if shape == "landscape" and width >= 1.6 * height:
                     score += SHAPE_BONUS
