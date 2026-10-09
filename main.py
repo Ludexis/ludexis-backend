@@ -42,7 +42,8 @@ def read_media(path: str, current_user=Depends(get_current_active_user)):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
     if not requested_path.is_file():
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
-    return FileResponse(requested_path)
+    # Artwork is replaced in place under the same name, so the browser must revalidate (a cheap 304) on every use.
+    return FileResponse(requested_path, headers={"Cache-Control": "private, no-cache"})
 
 
 app.include_router(media_router)

@@ -186,6 +186,7 @@ def test_media_requires_a_session():
         response = client.get(f"/media/{name}", headers={"Cookie": f"ludexis_access={access_token}"})
         assert response.status_code == 200
         assert response.content == PNG_BYTES
+        assert response.headers["cache-control"] == "private, no-cache"
         assert client.get(f"/media/{name}", headers={"Authorization": f"Bearer {access_token}"}).status_code == 200
     finally:
         (media_dir / name).unlink()

@@ -37,7 +37,8 @@ class IGDBClient:
         self.client_id, client_secret = self.credentials()
         response = httpx.post(
             settings.IGDB_TOKEN_URL,
-            params={
+            # Sent as a form body, not a query string, so the secret never appears in request logs.
+            data={
                 "client_id": self.client_id,
                 "client_secret": client_secret,
                 "grant_type": "client_credentials",
