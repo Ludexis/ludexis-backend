@@ -6,6 +6,8 @@ from fastapi.testclient import TestClient
 from app.models.archive_entry import ArchiveEntry
 from app.models.collection import Collection
 from app.models.genre import Genre
+from app.models.tag import Tag
+from app.utils.enums import MetadataStatus
 from main import app
 from tests.test_db import TestingSessionLocal
 
@@ -112,10 +114,34 @@ def test_user_access_hides_restricted_games_and_blocked_collections_everywhere()
     assert [len(item["entry_ids"]) for item in listed] == [2]
 
 
+def test_unidentified_games_stay_restricted_until_identified_or_cleared_by_hand():
+    word, *_ = seed_entries()
+    admin = auth_headers()
+    db = TestingSessionLocal()
+    entries = {entry.title.split()[0]: entry for entry in db.query(ArchiveEntry).filter(ArchiveEntry.title.contains(word))}
+    entries["A"].metadata_status = MetadataStatus.MATCHED
+    entries["A"].tags.append(Tag(name=f"Seen {word}"))
+    entries["b"].tags.append(Tag(name=f"Hidden {word}"))
+    db.add(Tag(name=f"Empty {word}"))
+    db.commit()
+    unidentified = entries["c"].id
+    db.close()
+
+    _user_id, viewer = viewer_headers(admin)
+    assert titles(client.get("/api/search/", params={"q": word}, headers=viewer)) == ["A"]
+    assert client.get(f"/api/archive-entries/{unidentified}", headers=viewer).status_code == 404
+    # Tags list only names with a game the user can see.
+    assert [tag["name"] for tag in client.get("/api/tags/", params={"q": word}, headers=viewer).json()] == [f"Seen {word}"]
+    assert len(client.get("/api/tags/", params={"q": word}, headers=admin).json()) == 2
+
+    client.patch(f"/api/archive-entries/{unidentified}", json={"restricted": False}, headers=admin)
+    assert titles(client.get("/api/search/", params={"q": word}, headers=viewer)) == ["A", "c"]
+
+
 def test_favourite_and_completed_marks_belong_to_each_user():
     word, *_ = seed_entries()
     admin = auth_headers()
-    _user_id, viewer = viewer_headers(admin)
+    _user_id, viewer = viewer_headers(admin, allow_restricted=True)
     first = client.get("/api/search/", params={"q": word}, headers=admin).json()[0]
     assert (first["is_favorite"], first["is_completed"]) == (False, False)
 

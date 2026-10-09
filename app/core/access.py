@@ -8,7 +8,7 @@ from app.models.archive_entry import ArchiveEntry
 from app.models.collection import Collection
 from app.models.user import User
 from app.models.user_entry_flag import UserEntryFlag
-from app.utils.enums import PermissionName
+from app.utils.enums import MetadataStatus, PermissionName
 
 # Sources whose records and art may hold restricted content; they are used only for users allowed it.
 RESTRICTED_PROVIDERS = {"VNDB"}
@@ -48,6 +48,8 @@ def entry_filters(user: User | None) -> list:
     filters = []
     if not user.allow_restricted:
         filters.append(ArchiveEntry.restricted.is_(False))
+        # Nothing is known about an unidentified game, so it counts as restricted until identified or cleared by hand.
+        filters.append(sa.or_(ArchiveEntry.metadata_status != MetadataStatus.UNMATCHED, ArchiveEntry.restricted_locked.is_(True)))
     if user.blocked_collection_ids:
         filters.append(~ArchiveEntry.collections.any(Collection.id.in_(user.blocked_collection_ids)))
     return filters
@@ -87,9 +89,5 @@ def set_flags(db: Session, user: User, entries: list[ArchiveEntry], favorite: bo
 
 
 def visible_names(relation, user: User | None):
-    """Filter for developers, tags and the like: names whose live games are all hidden from this user drop out."""
-    rules = entry_filters(user)
-    if not rules:
-        return sa.true()
-    live = ArchiveEntry.deleted_at.is_(None)
-    return sa.or_(~relation.any(live), relation.any(sa.and_(live, *rules)))
+    """Filter for developers, tags and the like: only names with a live game this user can see."""
+    return relation.any(sa.and_(ArchiveEntry.deleted_at.is_(None), *entry_filters(user)))
