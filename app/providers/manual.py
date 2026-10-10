@@ -11,6 +11,3 @@ class ManualProvider(MetadataProvider):
 
     def get_details(self, external_id: str) -> MetadataDetails | None:
         return None
-
-    def download_artwork(self, external_id: str) -> bytes | None:
-        return None

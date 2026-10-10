@@ -20,7 +20,3 @@ class MetadataProvider(ABC):
     @abstractmethod
     def get_details(self, external_id: str) -> MetadataDetails | None:
         raise NotImplementedError
-
-    @abstractmethod
-    def download_artwork(self, external_id: str) -> bytes | None:
-        raise NotImplementedError

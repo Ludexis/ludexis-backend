@@ -65,25 +65,6 @@ def test_details_requires_auth():
     assert response.status_code == 401
 
 
-def test_artwork_unknown_provider_404_admin():
-    token = login(
-        ADMIN_USERNAME,
-        ADMIN_PASSWORD,
-    )
-    response = client.get(
-        "/api/metadata/artwork/nosuchprovider/xyz",
-        headers=auth_header(token),
-    )
-    assert response.status_code == 404
-
-
-def test_artwork_requires_auth():
-    response = client.get(
-        "/api/metadata/artwork/nosuchprovider/xyz",
-    )
-    assert response.status_code == 401
-
-
 def test_details_unknown_provider_404_user():
     token = login(
         USER_USERNAME,

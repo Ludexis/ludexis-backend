@@ -30,5 +30,3 @@ class User(Base):
 
     roles = relationship("Role", secondary=user_roles, backref="users")
     refresh_tokens = relationship("RefreshToken", back_populates="user", cascade="all, delete-orphan")
-    notes = relationship("Note", back_populates="user", cascade="all, delete-orphan")
-    ratings = relationship("Rating", back_populates="user", cascade="all, delete-orphan")

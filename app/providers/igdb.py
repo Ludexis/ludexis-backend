@@ -201,9 +201,3 @@ class IGDBProvider(MetadataProvider):
             artwork_urls=artwork_urls,
             restricted=any(item.get("id") in RESTRICTED_THEME_IDS for item in game.get("themes", [])),
         )
-
-    def download_artwork(
-        self,
-        external_id: str,
-    ) -> bytes | None:
-        return None

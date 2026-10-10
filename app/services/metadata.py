@@ -352,12 +352,6 @@ class MetadataService:
                 return details
         return None
 
-    def download_artwork(self, provider_name: str, provider_id: str) -> bytes | None:
-        provider = self._get_provider(provider_name)
-        if provider is None:
-            return None
-        return provider.download_artwork(provider_id)
-
     def _get_provider(self, name: str) -> MetadataProvider | None:
         return self.provider_map.get(name)
 

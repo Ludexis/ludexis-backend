@@ -83,21 +83,3 @@ def read_metadata_details(
     if details is None:
         raise HTTPException(status_code=404, detail="Metadata not found")
     return details
-
-
-@router.get(
-    "/artwork/{provider_name}/{provider_id}",
-    summary="Download provider artwork",
-    description="Download artwork from a metadata provider.",
-    response_description="Artwork retrieved.",
-)
-def read_metadata_artwork(
-    provider_name: str,
-    provider_id: str,
-    current_user=Depends(get_current_active_user),
-    metadata_service: MetadataService = Depends(get_metadata_service),
-):
-    artwork = metadata_service.download_artwork(provider_name, provider_id)
-    if artwork is None:
-        raise HTTPException(status_code=404, detail="Artwork not available")
-    return artwork

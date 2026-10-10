@@ -43,7 +43,6 @@ class ArchiveEntry(Base):
     banner_path: str = mapped_column(sa.Text, nullable=True)
     logo_path: str = mapped_column(sa.Text, nullable=True)
     metadata_status: MetadataStatus = mapped_column(sa.Enum(MetadataStatus, name="metadata_status"), nullable=False, default=MetadataStatus.UNMATCHED)
-    metadata_source_id = mapped_column(sa.String(36), sa.ForeignKey("metadata_sources.id", ondelete="SET NULL"), nullable=True)
     metadata_source: str = mapped_column(sa.String(128), nullable=True)
     metadata_source_code: str = mapped_column(sa.String(128), nullable=True)
     metadata_override: bool = mapped_column(sa.Boolean, nullable=False, default=False,)
@@ -81,9 +80,6 @@ class ArchiveEntry(Base):
     franchise = relationship("Franchise", back_populates="archive_entries")
     library = relationship("Library", back_populates="archive_entries")
     screenshots = relationship("Screenshot", back_populates="archive_entry", cascade="all, delete-orphan")
-    notes = relationship("Note", back_populates="archive_entry", cascade="all, delete-orphan")
-    ratings = relationship("Rating", back_populates="archive_entry", cascade="all, delete-orphan")
-    metadata_source_rel = relationship("MetadataSource", back_populates="archive_entries")
     parent_series = relationship("ArchiveEntry", remote_side=[id], backref="child_entries")
     @property
     def library_status(self) -> str | None:

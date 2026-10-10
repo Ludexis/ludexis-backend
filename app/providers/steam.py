@@ -166,6 +166,3 @@ class SteamProvider(MetadataProvider):
             release_date=release_date,
             restricted=bool(RESTRICTED_DESCRIPTORS & set(data.get("content_descriptors", {}).get("ids") or [])),
         )
-
-    def download_artwork(self, external_id: str,) -> bytes | None:
-        return None

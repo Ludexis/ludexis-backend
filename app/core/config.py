@@ -12,13 +12,12 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(
     env_file=".env",
     env_file_encoding="utf-8",
+    # A .env written for an older release may still hold settings that no longer exist.
+    extra="ignore",
     )
-    PROJECT_NAME: str = "Ludexis Backend"
-    DEBUG: bool = False
     API_PREFIX: str = "/api"
 
     LOG_LEVEL: str = "INFO"
-    LOG_FORMAT: str = "json"
 
     TWITCH_CLIENT_ID: str = ""
     TWITCH_CLIENT_SECRET: str = ""
@@ -31,7 +30,6 @@ class Settings(BaseSettings):
     REDIS_URL: RedisDsn
     CELERY_BROKER_URL: RedisDsn
     CELERY_RESULT_BACKEND: RedisDsn
-    LIBRARY_SCAN_PATH: str = "./library"
     ARTWORK_STORAGE_PATH: str = "./artwork"
     MAX_ARTWORK_SIZE_MB: int = 10
     ALLOWED_ARTWORK_MIME_TYPES: list[str] = [

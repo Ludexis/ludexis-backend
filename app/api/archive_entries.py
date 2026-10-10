@@ -223,7 +223,7 @@ def override_archive_metadata(
     audit_service.record(
         db,
         current_user,
-        action="MANUAL_METADATA_OVERRIDE",
+        action=AuditAction.MANUAL_METADATA_OVERRIDE,
         entity="ArchiveEntry",
         entity_id=updated.id,
         details=f"Manual metadata override for {updated.title}",

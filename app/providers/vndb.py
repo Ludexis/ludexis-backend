@@ -124,6 +124,3 @@ class VNDBProvider(MetadataProvider):
             artwork_urls=[shot["url"] for shot in vn.get("screenshots", []) if shot.get("url")],
             restricted=any((release.get("minage") or 0) >= RESTRICTED_AGE for release in releases),
         )
-
-    def download_artwork(self, external_id: str) -> bytes | None:
-        return None
