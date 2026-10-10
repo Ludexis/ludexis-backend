@@ -5,17 +5,16 @@ WORKDIR /usr/src/app
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
 
-RUN apt-get update && \
-    apt-get install -y --no-install-recommends \
-    gcc \
-    libpq-dev && \
-    rm -rf /var/lib/apt/lists/*
-
+# Every dependency ships as a wheel (psycopg[binary], bcrypt, pillow), so no compiler is needed.
 COPY requirements.txt .
-
 RUN pip install --no-cache-dir -r requirements.txt
 
 COPY backend/ .
+
+# Runs unprivileged. /data is created here so a new named volume starts out owned by this user;
+# the games folder only needs to be readable.
+RUN useradd --uid 1000 --create-home ludexis && mkdir -p /data && chown ludexis:ludexis /data
+USER ludexis
 
 EXPOSE 8000
 
