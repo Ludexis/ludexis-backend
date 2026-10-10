@@ -6,6 +6,8 @@ from sqlalchemy.orm import Session
 
 from app.models.archive_entry import ArchiveEntry
 from app.models.collection import Collection
+from app.models.franchise import Franchise
+from app.models.screenshot import Screenshot
 from app.models.user import User
 from app.models.user_entry_flag import UserEntryFlag
 from app.utils.enums import MetadataStatus, PermissionName
@@ -53,6 +55,33 @@ def entry_filters(user: User | None) -> list:
     if user.blocked_collection_ids:
         filters.append(~ArchiveEntry.collections.any(Collection.id.in_(user.blocked_collection_ids)))
     return filters
+
+
+def media_visible(db: Session, user: User, path: str) -> bool:
+    """Whether a stored file may be sent to this user: it must belong to a game, collection or franchise they can see."""
+    filters = entry_filters(user)
+    if not filters and not user.blocked_collection_ids:
+        return True
+    # ponytail: three lookups on unindexed path columns per image; index them if libraries reach tens of thousands.
+    paths = {path, path.replace("/", "\\")}
+    screenshots = sa.select(Screenshot.archive_entry_id).where(Screenshot.file_path.in_(paths))
+    entries = db.query(ArchiveEntry.id).filter(
+        ArchiveEntry.deleted_at.is_(None),
+        *filters,
+        sa.or_(
+            ArchiveEntry.cover_path.in_(paths),
+            ArchiveEntry.banner_path.in_(paths),
+            ArchiveEntry.logo_path.in_(paths),
+            ArchiveEntry.id.in_(screenshots),
+        ),
+    )
+    collections = db.query(Collection.id).filter(
+        Collection.deleted_at.is_(None),
+        Collection.id.notin_(user.blocked_collection_ids or []),
+        sa.or_(Collection.cover_path.in_(paths), Collection.banner_path.in_(paths)),
+    )
+    franchises = db.query(Franchise.id).filter(Franchise.banner_path.in_(paths))
+    return any(db.query(query.exists()).scalar() for query in (entries, collections, franchises))
 
 
 def flagged_ids(user: User, flag: str):

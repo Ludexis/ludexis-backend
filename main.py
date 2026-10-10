@@ -3,14 +3,16 @@ from contextlib import asynccontextmanager
 from fastapi import APIRouter, Depends, FastAPI, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
+from sqlalchemy.orm import Session
 from prometheus_fastapi_instrumentator import Instrumentator
 
 from app.api import api_router
 
+from app.core.access import media_visible
 from app.core.auth import get_current_active_user
 from app.core.config import settings
 from app.core.logging import setup_logging
-from app.db.session import SessionLocal
+from app.db.session import SessionLocal, get_db
 from app.services.bootstrap import ensure_default_admin
 from app.services.storage import StorageService
 
@@ -50,11 +52,12 @@ media_router = APIRouter()
 
 
 @media_router.get("/media/{path:path}")
-def read_media(path: str, current_user=Depends(get_current_active_user)):
+def read_media(path: str, current_user=Depends(get_current_active_user), db: Session = Depends(get_db)):
     requested_path = (media_dir / path).resolve()
     if requested_path != media_dir and media_dir not in requested_path.parents:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
-    if not requested_path.is_file():
+    # Art of games the user may not see is as absent as the games themselves.
+    if not requested_path.is_file() or not media_visible(db, current_user, path):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
     # Artwork is replaced in place under the same name, so the browser must revalidate (a cheap 304) on every use.
     return FileResponse(requested_path, headers={"Cache-Control": "private, no-cache"})

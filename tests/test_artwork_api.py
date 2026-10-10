@@ -224,3 +224,17 @@ def test_artwork_candidates_and_set_from_url():
 
     entry = client.get(f"/api/archive-entries/{entry_id}", headers=_auth_headers(token)).json()
     assert entry["banner_path"] == chosen.json()["file_path"]
+
+
+def test_media_of_hidden_games_is_not_served():
+    token = admin_token()
+    hidden, shown = _create_entry(token), _create_entry(token)
+    paths = {}
+    for entry_id, restricted in ((hidden, True), (shown, False)):
+        paths[entry_id] = _upload_cover(token, entry_id).json()["file_path"]
+        client.patch(f"/api/archive-entries/{entry_id}", headers=_auth_headers(token), json={"restricted": restricted})
+
+    user = {"Cookie": f"ludexis_access={user_token()}"}
+    assert client.get(f"/media/{paths[hidden]}", headers=user).status_code == 404
+    assert client.get(f"/media/{paths[shown]}", headers=user).status_code == 200
+    assert client.get(f"/media/{paths[hidden]}", headers={"Cookie": f"ludexis_access={token}"}).status_code == 200
