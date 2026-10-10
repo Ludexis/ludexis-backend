@@ -154,7 +154,7 @@ def list_missing_artwork(
     current_user=Depends(get_current_active_user),
     db: Session = Depends(get_db),
 ):
-    missing = service.list_missing_artwork(db)
+    missing = service.list_missing_artwork(db, viewer=current_user)
     return [ArtworkMissingResponse(**entry) for entry in missing]
 
 

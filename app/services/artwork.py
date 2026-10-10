@@ -9,6 +9,7 @@ import hashlib
 from app.core.config import settings
 from app.models.archive_entry import ArchiveEntry
 from app.models.screenshot import Screenshot
+from app.models.user import User
 from app.repositories.archive_entry import ArchiveEntryRepository
 from app.repositories.screenshot import ScreenshotRepository
 from app.services.storage import StorageService
@@ -690,8 +691,8 @@ class ArtworkService:
 
         raise ValueError("Artwork not found")
 
-    def list_missing_artwork(self, db: Session) -> list[dict[str, str | list[str]]]:
-        entries = self.entry_repo.list_active(db, limit=None)
+    def list_missing_artwork(self, db: Session, viewer: User | None = None) -> list[dict[str, str | list[str]]]:
+        entries = self.entry_repo.list_active(db, limit=None, viewer=viewer)
         missing = []
         for entry in entries:
             missing_types: list[str] = []
@@ -715,7 +716,7 @@ class ArtworkService:
 
     def validate_all_artwork(self, db: Session,) -> list[dict]:
         # Reports artwork problems only; verification_status belongs to the archive file and is set by integrity checks.
-        entries = self.entry_repo.list_active(db, limit=None)
+        entries = self.entry_repo.list_active(db, limit=None, viewer=viewer)
         results = []
         for entry in entries:
             missing_types: list[str] = []

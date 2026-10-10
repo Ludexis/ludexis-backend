@@ -4,7 +4,10 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
+from app.core.logging import get_logger
 from app.db.session import get_db
+
+logger = get_logger(__name__)
 
 router = APIRouter(
     prefix="/health",
@@ -24,13 +27,8 @@ def database_health(db: Session = Depends(get_db)):
         return {"database": "healthy"}
 
     except Exception as exc:
-        raise HTTPException(
-            status_code=503,
-            detail={
-                "database": "unhealthy",
-                "error": str(exc),
-            },
-        ) from exc
+        logger.warning("Database health check failed: %s", exc)
+        raise HTTPException(status_code=503, detail={"database": "unhealthy"}) from exc
 
 
 @router.get("/redis")
@@ -44,10 +42,5 @@ def redis_health():
         return {"redis": "healthy"}
 
     except Exception as exc:
-        raise HTTPException(
-            status_code=503,
-            detail={
-                "redis": "unhealthy",
-                "error": str(exc),
-            },
-        ) from exc
+        logger.warning("Redis health check failed: %s", exc)
+        raise HTTPException(status_code=503, detail={"redis": "unhealthy"}) from exc
