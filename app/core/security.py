@@ -1,3 +1,4 @@
+import hashlib
 from datetime import datetime, UTC, timedelta
 from uuid import uuid4
 from jose import JWTError, jwt
@@ -62,3 +63,8 @@ def hash_password(password: str) -> str:
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
     return pwd_context.verify(plain_password, hashed_password)
+
+
+def token_digest(token: str) -> str:
+    """Refresh tokens are stored as this digest, so a leaked database holds no usable sessions."""
+    return hashlib.sha256(token.encode()).hexdigest()

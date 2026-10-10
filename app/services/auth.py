@@ -4,7 +4,7 @@ from jose import JWTError
 from sqlalchemy.orm import Session
 
 from app.core.logging import get_logger
-from app.core.security import create_access_token, create_refresh_token, hash_password, verify_password, verify_token
+from app.core.security import create_access_token, create_refresh_token, hash_password, token_digest, verify_password, verify_token
 from app.core.config import settings
 from app.models.refresh_token import RefreshToken
 from app.models.user import User
@@ -48,7 +48,7 @@ class AuthService:
         refresh_token = create_refresh_token(subject=user.id)
         expires_at = datetime.now(UTC) + timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS)
         self.refresh_repo.create(db, {
-            "token": refresh_token,
+            "token": token_digest(refresh_token),
             "user_id": user.id,
             "expires_at": expires_at,
         })

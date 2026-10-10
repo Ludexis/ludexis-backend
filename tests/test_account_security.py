@@ -86,3 +86,15 @@ def test_logout_all_ends_every_session():
         assert client.post("/api/auth/refresh", json={"refresh_token": tokens["refresh_token"]}).status_code == 401
     # Signing in again works.
     assert client.get("/api/auth/me", headers=bearer(login(name, "Old-pass-1"))).status_code == 200
+
+
+def test_refresh_tokens_are_stored_as_digests():
+    from app.models.refresh_token import RefreshToken
+
+    tokens = login(make_user(), "Old-pass-1")
+    db = TestingSessionLocal()
+    try:
+        assert db.query(RefreshToken).filter(RefreshToken.token == tokens["refresh_token"]).count() == 0
+    finally:
+        db.close()
+    assert client.post("/api/auth/refresh", json={"refresh_token": tokens["refresh_token"]}).status_code == 200

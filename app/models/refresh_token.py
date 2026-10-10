@@ -11,6 +11,7 @@ class RefreshToken(Base):
     __allow_unmapped__ = True
 
     id: str = mapped_column(sa.String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    # SHA-256 of the token (token_digest), never the token itself.
     token: str = mapped_column(sa.Text, nullable=False, unique=True)
     user_id = mapped_column(sa.String(36), sa.ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
     expires_at = mapped_column(sa.DateTime(timezone=True), nullable=False)
