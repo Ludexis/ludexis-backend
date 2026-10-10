@@ -97,6 +97,15 @@ def ensure_permission(current_user: User, permission: PermissionName) -> None:
         raise HTTPException(status_code=403, detail="Permission denied")
 
 
+def ensure_can_grant(current_user: User, permissions) -> None:
+    """Nobody hands out, edits or takes away rights they do not hold themselves; superusers hold them all."""
+    if current_user.is_superuser:
+        return
+    held = {perm.name for role in current_user.roles for perm in role.permissions}
+    if any(permission.name not in held for permission in permissions):
+        raise HTTPException(status_code=403, detail="You cannot grant or change permissions you do not have")
+
+
 def require_permission(permission: PermissionName):
     def permission_dependency(current_user: User = Depends(get_current_active_user)) -> User:
         ensure_permission(current_user, permission)

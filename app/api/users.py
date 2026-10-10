@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
-from app.core.auth import require_permission
+from app.core.auth import ensure_can_grant, require_permission
 from app.core.security import hash_password
 from app.db.session import get_db
 from app.models.user import User
@@ -75,6 +75,9 @@ def create_user(
 
     if data.is_superuser and not current_user.is_superuser:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only a superuser can create a superuser")
+    _ensure_access_grant(current_user, data.allow_restricted)
+    roles = _load_roles(db, data.role_ids) if data.role_ids else []
+    ensure_can_grant(current_user, [perm for role in roles for perm in role.permissions])
     hashed_password = hash_password(data.password)
     user = user_repo.create(db, {
         "username": data.username,
@@ -86,8 +89,8 @@ def create_user(
         "blocked_collection_ids": data.blocked_collection_ids,
     })
 
-    if data.role_ids:
-        user.roles = _load_roles(db, data.role_ids)
+    if roles:
+        user.roles = roles
         db.add(user)
         db.commit()
         db.refresh(user)
@@ -125,6 +128,19 @@ def _get_user_or_404(db: Session, user_id: str) -> User:
     return user
 
 
+def _ensure_access_grant(current_user: User, allow_restricted: bool | None) -> None:
+    if allow_restricted and not (current_user.is_superuser or current_user.allow_restricted):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="You cannot grant access you do not have")
+
+
+def _get_manageable_user(db: Session, user_id: str, current_user: User) -> User:
+    # Managing users does not reach above oneself: superusers are changed only by superusers.
+    user = _get_user_or_404(db, user_id)
+    if user.is_superuser and not current_user.is_superuser:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only a superuser can change a superuser")
+    return user
+
+
 @router.get(
     "/{user_id}",
     response_model=UserRead,
@@ -153,7 +169,11 @@ def update_user(
     current_user: User = Depends(require_permission(PermissionName.MANAGE_USERS)),
     db: Session = Depends(get_db),
 ):
-    user = _get_user_or_404(db, user_id)
+    user = _get_manageable_user(db, user_id, current_user)
+    changes_access = data.role_ids is not None or data.allow_restricted is not None or data.blocked_collection_ids is not None
+    if user.id == current_user.id and changes_access and not current_user.is_superuser:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="You cannot change your own roles or access")
+    _ensure_access_grant(current_user, data.allow_restricted)
     old_roles = list(user.roles)
     old_role_ids = {role.id for role in old_roles}
     assigned_roles: list = []
@@ -197,6 +217,7 @@ def update_user(
         new_role_ids = {role.id for role in new_roles}
         assigned_roles = [role for role in new_roles if role.id not in old_role_ids]
         removed_roles = [role for role in old_roles if role.id not in new_role_ids]
+        ensure_can_grant(current_user, [perm for role in assigned_roles + removed_roles for perm in role.permissions])
         user.roles = new_roles
 
     db.add(user)
@@ -248,7 +269,7 @@ def delete_user(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Cannot delete your own account",
         )
-    user = _get_user_or_404(db, user_id)
+    user = _get_manageable_user(db, user_id, current_user)
     user_repo.delete(db, user)
     AuthService().end_sessions(db, user)
     audit_log_service.log(
@@ -278,7 +299,7 @@ def activate_user(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Cannot activate your own account",
         )
-    user = _get_user_or_404(db, user_id)
+    user = _get_manageable_user(db, user_id, current_user)
     user = user_repo.activate(db, user)
     audit_log_service.log(db, AuditAction.ACTIVATE_USER, "User", user.id, current_user.id, f"Activated {user.username}")
     return user
@@ -301,7 +322,7 @@ def deactivate_user(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Cannot deactivate your own account",
         )
-    user = _get_user_or_404(db, user_id)
+    user = _get_manageable_user(db, user_id, current_user)
     user = user_repo.deactivate(db, user)
     audit_log_service.log(db, AuditAction.DEACTIVATE_USER, "User", user.id, current_user.id, f"Deactivated {user.username}")
     return user
@@ -320,7 +341,7 @@ def reset_password(
     current_user: User = Depends(require_permission(PermissionName.MANAGE_USERS)),
     db: Session = Depends(get_db),
 ):
-    user = _get_user_or_404(db, user_id)
+    user = _get_manageable_user(db, user_id, current_user)
     user.hashed_password = hash_password(data.password)
     db.add(user)
     db.commit()

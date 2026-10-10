@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
-from app.core.auth import require_permission
+from app.core.auth import ensure_can_grant, require_permission
 from app.db.session import get_db
 from app.repositories.permission import PermissionRepository
 from app.repositories.role import RoleRepository
@@ -57,9 +57,11 @@ def create_role(
     current_user=Depends(require_permission(PermissionName.MANAGE_USERS)),
     db: Session = Depends(get_db),
 ):
+    permissions = _load_permissions(db, data.permission_ids or [])
+    ensure_can_grant(current_user, permissions)
     role = role_repo.create(db, {"name": data.name, "description": data.description})
-    if data.permission_ids:
-        role.permissions = _load_permissions(db, data.permission_ids)
+    if permissions:
+        role.permissions = permissions
         db.add(role)
         db.commit()
         db.refresh(role)
@@ -108,6 +110,7 @@ def update_role(
     role = role_repo.get(db, role_id)
     if role is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Role not found")
+    ensure_can_grant(current_user, role.permissions)
 
     if data.name is not None:
         role.name = data.name
@@ -116,7 +119,9 @@ def update_role(
         role.description = data.description
 
     if data.permission_ids is not None:
-        role.permissions = _load_permissions(db, data.permission_ids)
+        permissions = _load_permissions(db, data.permission_ids)
+        ensure_can_grant(current_user, permissions)
+        role.permissions = permissions
 
     db.add(role)
     db.commit()
@@ -147,6 +152,7 @@ def delete_role(
     role = role_repo.get(db, role_id)
     if role is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Role not found")
+    ensure_can_grant(current_user, role.permissions)
     role_repo.delete(db, role)
     audit_log_service.log(
         db,
