@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
-from app.core.auth import ensure_permission, get_current_active_user, get_optional_current_user, require_permission
+from app.core.auth import require_permission
 from app.core.security import hash_password
 from app.db.session import get_db
 from app.models.user import User
@@ -10,6 +10,7 @@ from app.repositories.user import UserRepository
 from app.schemas.auth import PasswordResetRequest
 from app.schemas.user import UserCreate, UserRead, UserUpdate
 from app.services.audit import AuditService
+from app.services.auth import AuthService
 from app.utils.audit_actions import AuditAction
 from app.utils.enums import PermissionName
 
@@ -30,18 +31,6 @@ def _load_roles(db: Session, role_ids: list[str]) -> list:
             )
         roles.append(role)
     return roles
-
-
-def _require_manage_users_if_initialized(
-    db: Session = Depends(get_db),
-    current_user: User | None = Depends(get_optional_current_user),
-) -> User | None:
-    if not user_repo.has_any(db):
-        return None
-    if current_user is None:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Not authenticated")
-    ensure_permission(current_user, PermissionName.MANAGE_USERS)
-    return current_user
 
 
 @router.get(
@@ -70,10 +59,9 @@ def list_users(
 )
 def create_user(
     data: UserCreate,
-    current_user: User | None = Depends(_require_manage_users_if_initialized),
+    current_user: User = Depends(require_permission(PermissionName.MANAGE_USERS)),
     db: Session = Depends(get_db),
 ):
-    initialized = user_repo.has_any(db)
     if user_repo.get_by_username(db, data.username):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -85,19 +73,20 @@ def create_user(
             detail="Email is already in use",
         )
 
+    if data.is_superuser and not current_user.is_superuser:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only a superuser can create a superuser")
     hashed_password = hash_password(data.password)
     user = user_repo.create(db, {
         "username": data.username,
         "email": data.email,
         "hashed_password": hashed_password,
-        "is_active": True if not initialized else data.is_active,
-        "is_superuser": True if not initialized else data.is_superuser,
-        # The first account owns the server and sees everything.
-        "allow_restricted": True if not initialized else data.allow_restricted,
-        "blocked_collection_ids": data.blocked_collection_ids if initialized else [],
+        "is_active": data.is_active,
+        "is_superuser": data.is_superuser,
+        "allow_restricted": data.allow_restricted,
+        "blocked_collection_ids": data.blocked_collection_ids,
     })
 
-    if initialized and data.role_ids:
+    if data.role_ids:
         user.roles = _load_roles(db, data.role_ids)
         db.add(user)
         db.commit()
@@ -108,18 +97,18 @@ def create_user(
         action=AuditAction.CREATE_USER,
         entity="User",
         entity_id=user.id,
-        user_id=current_user.id if current_user else None,
+        user_id=current_user.id,
         details=f"Created user '{user.username}'",
     )
 
-    if initialized and data.role_ids:
+    if data.role_ids:
         for role in user.roles:
             audit_log_service.log(
                 db,
                 action=AuditAction.ASSIGN_ROLE,
                 entity="User",
                 entity_id=user.id,
-                user_id=current_user.id if current_user else None,
+                user_id=current_user.id,
                 details=f"Assigned role '{role.name}' to user '{user.username}'",
             )
 
@@ -192,7 +181,9 @@ def update_user(
     if data.is_active is not None:
         user.is_active = data.is_active
 
-    if data.is_superuser is not None:
+    if data.is_superuser is not None and data.is_superuser != user.is_superuser:
+        if not current_user.is_superuser:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only a superuser can change superuser rights")
         user.is_superuser = data.is_superuser
 
     if data.allow_restricted is not None:
@@ -259,6 +250,7 @@ def delete_user(
         )
     user = _get_user_or_404(db, user_id)
     user_repo.delete(db, user)
+    AuthService().end_sessions(db, user)
     audit_log_service.log(
         db,
         action=AuditAction.DELETE_USER,

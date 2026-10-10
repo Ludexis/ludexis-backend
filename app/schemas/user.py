@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, EmailStr, Field
 
 from app.schemas.role import RoleRead
 
@@ -16,7 +16,7 @@ class UserBase(BaseModel):
 
 
 class UserCreate(UserBase):
-    password: str
+    password: str = Field(min_length=8, max_length=256)
     role_ids: list[str] = []
 
     model_config = {
@@ -38,7 +38,7 @@ class UserCreate(UserBase):
 class UserUpdate(BaseModel):
     username: str | None = None
     email: EmailStr | None = None
-    password: str | None = None
+    password: str | None = Field(default=None, min_length=8, max_length=256)
     is_active: bool | None = None
     is_superuser: bool | None = None
     role_ids: list[str] | None = None
@@ -60,6 +60,7 @@ class UserUpdate(BaseModel):
 
 class UserRead(UserBase):
     id: str
+    must_change_password: bool = False
     roles: list[RoleRead] = []
     created_at: datetime | None = None
 

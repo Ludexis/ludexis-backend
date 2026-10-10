@@ -61,12 +61,13 @@ class LogoutRequest(BaseModel):
 
 
 class ChangePasswordRequest(BaseModel):
-    current_password: str
+    # Not needed for the default administrator's first-run change.
+    current_password: str = ""
     new_password: str = Field(min_length=8, max_length=256)
 
 
 class PasswordResetRequest(BaseModel):
-    password: str
+    password: str = Field(min_length=8, max_length=256)
 
     model_config = {
         "json_schema_extra": {

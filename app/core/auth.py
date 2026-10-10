@@ -27,6 +27,7 @@ ACCESS_COOKIE = "ludexis_access"
 REFRESH_COOKIE = "ludexis_refresh"
 CSRF_HEADER = "X-Requested-With"
 UNSAFE_METHODS = {"POST", "PUT", "PATCH", "DELETE"}
+PASSWORD_CHANGE_PATHS = {f"{settings.API_PREFIX}/auth/change-password", f"{settings.API_PREFIX}/auth/logout-all"}
 
 
 def require_csrf_header(request: Request) -> None:
@@ -66,7 +67,7 @@ def _user_from_token(token: str, db: Session) -> User:
         payload = token_payload(token, token_type="access")
     except JWTError as exc:
         raise HTTPException(status_code=401, detail="Invalid authentication credentials") from exc
-    user = user_repo.get(db, payload.get("sub"))
+    user = user_repo.get_active(db, payload.get("sub"))
     if user is None or not user.is_active:
         raise HTTPException(status_code=401, detail="Inactive user")
     if user.sessions_revoked_at and payload.get("iat", 0) < user.sessions_revoked_at.timestamp():
@@ -81,16 +82,12 @@ def get_current_user(request: Request, token: str | None = Depends(oauth2_scheme
     return _user_from_token(token, db)
 
 
-def get_optional_current_user(request: Request, token: str | None = Depends(oauth2_scheme_optional), db: Session = Depends(get_db)) -> User | None:
-    token = request_token(request, token)
-    if not token:
-        return None
-    return _user_from_token(token, db)
-
-
-def get_current_active_user(current_user: User = Depends(get_current_user)) -> User:
+def get_current_active_user(request: Request, current_user: User = Depends(get_current_user)) -> User:
     if not current_user.is_active:
         raise HTTPException(status_code=400, detail="Inactive user")
+    # The default administrator's password is public; nothing else is served until it is changed.
+    if current_user.must_change_password and request.url.path not in PASSWORD_CHANGE_PATHS:
+        raise HTTPException(status_code=403, detail="Change the default password first")
     return current_user
 
 

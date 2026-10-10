@@ -70,7 +70,9 @@ class AuthService:
                 extra={"reason": "invalid_or_revoked"},
             )
             raise JWTError("Invalid refresh token")
-        user = self.user_repo.get(db, subject)
+        user = self.user_repo.get_active(db, subject)
+        if user is None or not user.is_active:
+            raise JWTError("Account deleted or disabled")
         logger.info(
             "Refresh token rotation",
             extra={
@@ -91,9 +93,11 @@ class AuthService:
         logger.info("User sessions ended", extra={"user_id": user.id})
 
     def change_password(self, db: Session, user: User, current_password: str, new_password: str) -> bool:
-        if not verify_password(current_password, user.hashed_password):
+        # The first-run change follows a sign-in with the default password, so it is not asked for again.
+        if not user.must_change_password and not verify_password(current_password, user.hashed_password):
             return False
         user.hashed_password = hash_password(new_password)
+        user.must_change_password = False
         self.end_sessions(db, user)
         return True
 

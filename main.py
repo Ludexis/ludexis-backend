@@ -1,3 +1,5 @@
+from contextlib import asynccontextmanager
+
 from fastapi import APIRouter, Depends, FastAPI, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
@@ -8,11 +10,23 @@ from app.api import api_router
 from app.core.auth import get_current_active_user
 from app.core.config import settings
 from app.core.logging import setup_logging
+from app.db.session import SessionLocal
+from app.services.bootstrap import ensure_default_admin
 from app.services.storage import StorageService
 
 setup_logging()
 
+
+@asynccontextmanager
+async def lifespan(_: FastAPI):
+    # A fresh server gets the default administrator, so the first sign-in needs no extra setup step.
+    with SessionLocal() as db:
+        ensure_default_admin(db)
+    yield
+
+
 app = FastAPI(
+    lifespan=lifespan,
     title="Ludexis Backend",
     version="0.1.0",
     description="Self-hosted game archive metadata catalog backend built with FastAPI.",

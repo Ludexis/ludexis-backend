@@ -52,6 +52,11 @@ class Settings(BaseSettings):
 
     CORS_ORIGINS: str = "http://localhost:3000,http://127.0.0.1:3000"
 
+    # Created on first start when the server has no accounts; it must choose a new password at its first sign-in.
+    DEFAULT_ADMIN_USERNAME: str = "admin"
+    DEFAULT_ADMIN_PASSWORD: str = "admin"
+    DEFAULT_ADMIN_EMAIL: str = "admin@example.com"
+
     @model_validator(mode="after")
     def _jwt_secret(self) -> "Settings":
         if not self.JWT_SECRET_KEY:

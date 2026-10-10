@@ -13,6 +13,7 @@ from app.core.auth import (
 )
 from app.core.config import settings
 from app.core.rate_limit import LoginRateLimiter
+from app.core.security import verify_password
 from app.db.session import get_db
 from app.repositories.refresh_token import RefreshTokenRepository
 from app.models.user import User
@@ -175,6 +176,8 @@ def change_password(
             detail="Too many failed attempts. Try again later.",
             headers={"Retry-After": str(retry_after)},
         )
+    if verify_password(data.new_password, current_user.hashed_password):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Choose a password different from the current one")
     if not auth_service.change_password(db, current_user, data.current_password, data.new_password):
         login_limiter.record_failure(current_user.username, address)
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Current password is incorrect")
