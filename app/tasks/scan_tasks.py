@@ -37,25 +37,25 @@ def _queue_enrichment(db: Session, scan_job_id: str, stats: dict) -> dict:
 
 
 @celery_app.task(**JOB_TASK_OPTIONS)
-def scan_full_task(self, job_history_id: str) -> str:
+def scan_full_task(self, job_history_id: str, library_id: str | None = None) -> str:
     return run_job(
         self,
         job_history_id,
         "Full scan",
         lambda db, report, job_id: _queue_enrichment(
-            db, job_id, ScannerService().scan_full(db, job_id=job_id, on_progress=report)
+            db, job_id, ScannerService().scan_full(db, job_id=job_id, on_progress=report, library_id=library_id)
         ),
     )
 
 
 @celery_app.task(**JOB_TASK_OPTIONS)
-def scan_incremental_task(self, job_history_id: str) -> str:
+def scan_incremental_task(self, job_history_id: str, library_id: str | None = None) -> str:
     return run_job(
         self,
         job_history_id,
         "Incremental scan",
         lambda db, report, job_id: _queue_enrichment(
-            db, job_id, ScannerService().scan_incremental(db, job_id=job_id, on_progress=report)
+            db, job_id, ScannerService().scan_incremental(db, job_id=job_id, on_progress=report, library_id=library_id)
         ),
     )
 

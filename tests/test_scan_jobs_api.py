@@ -225,3 +225,22 @@ def test_job_start_and_cancel_are_audited():
 
     actions = {log["action"] for log in logs if log["entity_id"] == job["id"]}
     assert actions == {"START_JOB", "CANCEL_JOB"}
+
+
+def test_scan_of_one_library_passes_it_to_the_task(monkeypatch, tmp_path):
+    from types import SimpleNamespace
+
+    from celery.app.task import Task
+
+    token = admin_token()
+    headers = {"Authorization": f"Bearer {token}"}
+    library = client.post("/api/libraries/", json={"name": f"Skybound {tmp_path.name}", "path": str(tmp_path)}, headers=headers)
+    assert library.status_code == 201
+    queued = []
+    monkeypatch.setattr(Task, "apply_async", lambda self, *args, **kwargs: queued.append(kwargs) or SimpleNamespace(id="t1"))
+
+    response = client.post(f"/api/scan/incremental?library_id={library.json()['id']}", headers=headers)
+
+    assert response.status_code == 201
+    assert queued[0]["kwargs"] == {"library_id": library.json()["id"]}
+    assert client.post("/api/scan/full?library_id=no-such-library", headers=headers).status_code == 404

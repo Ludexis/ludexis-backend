@@ -137,10 +137,10 @@ def test_failing_file_does_not_abort_scan(tmp_path, monkeypatch):
     scanner = ScannerService()
     original_hash = scanner._compute_file_hash
 
-    def flaky_hash(path):
+    def flaky_hash(path, on_chunk=None):
         if "Broken" in path.name:
             raise OSError("unreadable")
-        return original_hash(path)
+        return original_hash(path, on_chunk)
 
     monkeypatch.setattr(scanner, "_compute_file_hash", flaky_hash)
     progress = []
@@ -168,4 +168,18 @@ def test_deleted_entry_stays_deleted_and_keeps_its_file(tmp_path):
     assert archive.exists()
     assert again["created"] == 0
     assert again["ignored_deleted"] == 1
+    db.close()
+
+
+def test_progress_moves_while_a_large_archive_is_hashed(tmp_path):
+    from app.services.scanner import HASH_CHUNK
+
+    db = TestingSessionLocal()
+    (tmp_path / f"{uuid.uuid4().hex}.zip").write_bytes(uuid.uuid4().bytes * (3 * HASH_CHUNK // 16))
+    progress = []
+
+    ScannerService().scan_full(db, scan_root=str(tmp_path), on_progress=lambda done, total: progress.append((done, total)))
+
+    # Three chunks read, then the stored entry: the bar moves before the item is finished.
+    assert progress == [(1, 4), (2, 4), (3, 4), (4, 4)]
     db.close()

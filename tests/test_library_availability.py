@@ -120,3 +120,19 @@ def test_new_library_path_relinks_entries(db, tmp_path):
     assert {path: entry.id for path, entry in after.items()} == before
     assert all(entry.file_path.startswith(str(new_root.resolve())) for entry in after.values())
     assert stats["created"] == 0
+
+
+def test_a_library_can_be_scanned_on_its_own(db, tmp_path):
+    picked, other = tmp_path / "picked", tmp_path / "other"
+    populate(picked)
+    populate(other)
+    picked_library, other_library = make_library(db, picked), make_library(db, other)
+    picked_library.enabled = False
+    db.commit()
+
+    stats = ScannerService().scan_incremental(db, library_id=picked_library.id)
+
+    # Picked by hand, so scanned even though it is left out of scans of everything.
+    assert stats["library"] == picked_library.name
+    assert len(entries_of(db, picked_library)) == 2
+    assert entries_of(db, other_library) == []

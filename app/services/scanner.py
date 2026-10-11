@@ -24,8 +24,10 @@ logger = get_logger(__name__)
 
 SUPPORTED_ARCHIVE_EXTENSIONS = {".zip", ".rar", ".7z", ".iso", ".exe"}
 SUPPORTED_FOLDER_TYPE = "folder"
-# Called with (processed, total) after each discovered item.
+# Called with (processed, total) as the scan goes on.
 ProgressCallback = Callable[[int, int], None]
+# Progress is counted in hash-sized chunks, so the bar moves while a large archive is read.
+HASH_CHUNK = 1024 * 1024
 # OS-generated files that do not make an organizing folder a game folder.
 IGNORED_FILE_NAMES = {"desktop.ini", "thumbs.db"}
 
@@ -51,15 +53,19 @@ class ScannerService:
         self.repo = ArchiveEntryRepository()
         self.library_repo = LibraryRepository()
 
-    def _compute_file_hash(self, path: Path) -> str | None:
+    def _compute_file_hash(self, path: Path, on_chunk: Callable[[int], None] | None = None) -> str | None:
         # Folder entries have no single file to hash.
         if path.is_dir():
             return None
         sha256 = hashlib.sha256()
 
         with open(path, "rb") as f:
-            while chunk := f.read(1024 * 1024):
+            chunks = 0
+            while chunk := f.read(HASH_CHUNK):
                 sha256.update(chunk)
+                chunks += 1
+                if on_chunk:
+                    on_chunk(chunks)
 
         return sha256.hexdigest()
     
@@ -124,15 +130,15 @@ class ScannerService:
                 stats["corrupted"] += 1
         return stats
 
-    def scan_full(self, db: Session, scan_root: str | None = None, job_id: str | None = None, on_progress: ProgressCallback | None = None,) -> dict:
+    def scan_full(self, db: Session, scan_root: str | None = None, job_id: str | None = None, on_progress: ProgressCallback | None = None, library_id: str | None = None,) -> dict:
         library_scans_total.inc()
-        return self._scan(db, "Full scan", scan_root, job_id, on_progress, incremental=False)
+        return self._scan(db, "Full scan", scan_root, job_id, on_progress, incremental=False, library_id=library_id)
 
-    def scan_incremental(self, db: Session, scan_root: str | None = None, job_id: str | None = None, on_progress: ProgressCallback | None = None,) -> dict:
+    def scan_incremental(self, db: Session, scan_root: str | None = None, job_id: str | None = None, on_progress: ProgressCallback | None = None, library_id: str | None = None,) -> dict:
         incremental_scans_total.inc()
-        return self._scan(db, "Incremental scan", scan_root, job_id, on_progress, incremental=True)
+        return self._scan(db, "Incremental scan", scan_root, job_id, on_progress, incremental=True, library_id=library_id)
 
-    def _scan(self, db: Session, label: str, scan_root: str | None, job_id: str | None, on_progress: ProgressCallback | None, incremental: bool,) -> dict:
+    def _scan(self, db: Session, label: str, scan_root: str | None, job_id: str | None, on_progress: ProgressCallback | None, incremental: bool, library_id: str | None = None,) -> dict:
         logger.info(
             f"{label} started",
             extra={
@@ -146,7 +152,8 @@ class ScannerService:
         else:
             targets = []
             for library in self.library_repo.list_active(db):
-                if not library.enabled:
+                # A library picked by hand is scanned even when it is left out of scans of everything.
+                if (library.id != library_id) if library_id else not library.enabled:
                     continue
                 was_offline = library.status == LibraryStatus.OFFLINE
                 if self.check_library(db, library):
@@ -182,10 +189,11 @@ class ScannerService:
         stats["offline_libraries"] = offline
         stats["reconnected_libraries"] = [library.name for library, _, reconnected in batches if reconnected]
         stats["missing"] = 0
-        total = sum(len(items) for _, items, _ in batches)
+        if library_id:
+            stats["library"] = next((library.name for library, _, _ in batches), None) or ", ".join(offline)
+        total = sum(self._progress_weight(item) for _, items, _ in batches for item in items)
         done = 0
         for library, items, _ in batches:
-            library_id = library.id if library is not None else None
             for item in items:
                 if self._job_cancelled(db, job_id):
                     stats["cancelled"] = True
@@ -196,8 +204,11 @@ class ScannerService:
                         },
                     )
                     return stats
-                self._process_item(db, item, library_id, stats)
-                done += 1
+                weight = self._progress_weight(item)
+                # The last unit is reported once the item is stored, not when its hash is read.
+                on_chunk = (lambda chunks, start=done, weight=weight: on_progress(start + min(chunks, weight - 1), total)) if on_progress else None
+                self._process_item(db, item, library.id if library is not None else None, stats, on_chunk)
+                done += weight
                 if on_progress:
                     on_progress(done, total)
 
@@ -244,6 +255,10 @@ class ScannerService:
         if error:
             logger.warning("Library offline", extra={"library": library.name, "path": library.path, "reason": error})
         return error is None
+
+    def _progress_weight(self, item: ArchiveScanItem) -> int:
+        # One unit per item plus one per chunk it may have to hash; folders are never hashed.
+        return 1 + (item.file_size or 0) // HASH_CHUNK
 
     def _relative_path(self, file_path: str, root: Path) -> str | None:
         try:
@@ -339,9 +354,9 @@ class ScannerService:
             modified_time=None,
         )
 
-    def _process_item(self, db: Session, item: ArchiveScanItem, library_id: str | None, stats: dict,) -> None:
+    def _process_item(self, db: Session, item: ArchiveScanItem, library_id: str | None, stats: dict, on_chunk: Callable[[int], None] | None = None,) -> None:
         try:
-            self._ingest(db, item, library_id, stats)
+            self._ingest(db, item, library_id, stats, on_chunk)
         except Exception:
             # One unreadable or vanished file must not abort the whole scan.
             db.rollback()
@@ -353,7 +368,7 @@ class ScannerService:
                 },
             )
 
-    def _ingest(self, db: Session, item: ArchiveScanItem, library_id: str | None, stats: dict,) -> None:
+    def _ingest(self, db: Session, item: ArchiveScanItem, library_id: str | None, stats: dict, on_chunk: Callable[[int], None] | None = None,) -> None:
         existing = self.repo.get_by_file_path(db, item.file_path)
         if existing:
             changed = (
@@ -368,7 +383,7 @@ class ScannerService:
                 if relink:
                     self.repo.update(db, existing, relink)
                 return
-            self._ensure_file_hash(item)
+            self._ensure_file_hash(item, on_chunk)
             update = {
                 "file_size": item.file_size,
                 "modified_time": item.modified_time,
@@ -400,7 +415,7 @@ class ScannerService:
                 stats["moved"] += 1
                 return
 
-        self._ensure_file_hash(item)
+        self._ensure_file_hash(item, on_chunk)
         if item.file_hash:
             for candidate in self.repo.get_all_by_hash(db, item.file_hash):
                 # Same content at a new path while the old path is gone means the archive was moved;
@@ -436,10 +451,11 @@ class ScannerService:
         stats["created"] += 1
         stats["created_ids"].append(archive_entry.id)
 
-    def _ensure_file_hash(self, item: ArchiveScanItem,) -> None:
+    def _ensure_file_hash(self, item: ArchiveScanItem, on_chunk: Callable[[int], None] | None = None,) -> None:
         if item.file_hash is None:
             item.file_hash = self._compute_file_hash(
-                Path(item.file_path)
+                Path(item.file_path),
+                on_chunk,
             )
     
     def find_duplicates(self, db: Session, viewer=None) -> list[dict]:
