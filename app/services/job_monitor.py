@@ -15,9 +15,12 @@ class JobMonitorService:
         return inspect.reserved() or {}
 
     def stats(self) -> dict:
-        inspect = celery_app.control.inspect()
-
-        workers = inspect.ping() or {}
+        # A broadcast waits its whole timeout for workers it doesn't know of; once ping has
+        # counted them, the next two return as soon as each has answered.
+        workers = celery_app.control.inspect().ping() or {}
+        if not workers:
+            return {"workers": 0, "active_tasks": 0, "reserved_tasks": 0}
+        inspect = celery_app.control.inspect(destination=list(workers), limit=len(workers))
         active = inspect.active() or {}
         reserved = inspect.reserved() or {}
 
