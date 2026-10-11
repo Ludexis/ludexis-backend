@@ -716,7 +716,7 @@ class ArtworkService:
 
     def validate_all_artwork(self, db: Session,) -> list[dict]:
         # Reports artwork problems only; verification_status belongs to the archive file and is set by integrity checks.
-        entries = self.entry_repo.list_active(db, limit=None, viewer=viewer)
+        entries = self.entry_repo.list_active(db, limit=None)
         results = []
         for entry in entries:
             missing_types: list[str] = []

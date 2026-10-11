@@ -192,3 +192,20 @@ def test_unused_artwork_is_removed_and_referenced_or_fresh_files_kept():
     assert not stale.exists()
     assert fresh.exists() and referenced.exists()
     db.close()
+
+
+def test_scheduled_validation_checks_every_entry():
+    import uuid
+
+    from app.models.archive_entry import ArchiveEntry
+    from tests.test_db import TestingSessionLocal
+
+    db = TestingSessionLocal()
+    entry = ArchiveEntry(title="Quiet Meadow", file_path=f"D:/Tmp/{uuid.uuid4()}.zip", restricted=True)
+    db.add(entry)
+    db.commit()
+
+    results = {r["archive_id"]: r for r in ArtworkService().validate_all_artwork(db)}
+
+    assert results[entry.id]["missing_types"] == ["cover", "banner", "logo"]
+    db.close()
