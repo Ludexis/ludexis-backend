@@ -176,13 +176,13 @@ def test_unused_artwork_is_removed_and_referenced_or_fresh_files_kept():
 
     db = TestingSessionLocal()
     service = ArtworkService()
-    kept_path = f"covers/{uuid.uuid4()}.jpg"
+    kept_path = service.storage.save(f"covers/{uuid.uuid4()}.jpg", b"cover")
     entry = ArchiveEntry(title="Quiet Meadow", file_path=f"D:/Tmp/{uuid.uuid4()}.zip", cover_path=kept_path)
     db.add(entry)
     db.commit()
     stale = service.storage.absolute_path(service.storage.save(f"banners/{uuid.uuid4()}.jpg", b"old"))
     fresh = service.storage.absolute_path(service.storage.save(f"logos/{uuid.uuid4()}.png", b"saving"))
-    referenced = service.storage.absolute_path(service.storage.save(kept_path, b"cover"))
+    referenced = service.storage.absolute_path(kept_path)
     hour_ago = time.time() - 7200
     os.utime(stale, (hour_ago, hour_ago))
     os.utime(referenced, (hour_ago, hour_ago))

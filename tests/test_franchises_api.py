@@ -72,7 +72,7 @@ def test_choosing_a_games_banner_copies_it_for_the_franchise(franchise):
 
     assert body["banner_path"].startswith(f"franchises/{franchise_id}/")
     assert body["image_path"] == body["banner_path"]
-    assert storage.absolute_path(body["banner_path"]).read_bytes() == PNG_BYTES
+    assert storage.absolute_path(body["banner_path"]).read_bytes() == storage.absolute_path(banners["Second"]).read_bytes()
     # Unused-file cleanup keeps the franchise's own copy.
     ArtworkService().garbage_collect_artwork(TestingSessionLocal())
     assert storage.exists(body["banner_path"])
@@ -91,7 +91,7 @@ def test_uploading_then_resetting_returns_to_the_automatic_image(franchise):
     uploaded = client.post(
         f"/api/franchises/{franchise_id}/image", headers=auth, files={"file": ("art.png", PNG_BYTES, "image/png")},
     ).json()
-    assert uploaded["banner_path"].endswith(".png")
+    assert uploaded["banner_path"].endswith(".webp")
 
     reset = client.delete(f"/api/franchises/{franchise_id}/image", headers=auth).json()
 

@@ -214,7 +214,7 @@ def test_artwork_candidates_and_set_from_url():
             "archive_entry_id": entry_id, "artwork_type": "banner", "url": "https://img.example/shot.jpg",
         })
         assert chosen.status_code == 200, chosen.text
-        assert chosen.json()["file_path"].endswith(".png")
+        assert chosen.json()["file_path"].endswith(".webp")
 
         # Anything not offered for this game is refused rather than fetched.
         refused = client.post("/api/artwork/from-url", headers=_auth_headers(token), json={

@@ -15,6 +15,7 @@ from app.core.logging import setup_logging
 from app.db.session import SessionLocal, get_db
 from app.services.bootstrap import ensure_default_admin
 from app.services.storage import StorageService
+from app.utils.artwork import is_versioned
 
 setup_logging()
 
@@ -59,8 +60,9 @@ def read_media(path: str, current_user=Depends(get_current_active_user), db: Ses
     # Art of games the user may not see is as absent as the games themselves.
     if not requested_path.is_file() or not media_visible(db, current_user, path):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
-    # Artwork is replaced in place under the same name, so the browser must revalidate (a cheap 304) on every use.
-    return FileResponse(requested_path, headers={"Cache-Control": "private, no-cache"})
+    # A versioned name never changes contents, so the browser keeps it; older names are revalidated (a cheap 304) on every use.
+    cache = "private, max-age=31536000, immutable" if is_versioned(path) else "private, no-cache"
+    return FileResponse(requested_path, headers={"Cache-Control": cache})
 
 
 app.include_router(media_router)

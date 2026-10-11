@@ -21,7 +21,7 @@ from app.services.settings import SettingsService
 from app.providers.steamgriddb import SteamGridDBClient
 from app.utils.cover_fit import content_ratio, fit_cover
 from app.utils.normalization import title_key
-from app.utils.artwork import ArtworkType, build_artwork_relative_path, is_allowed_artwork_mime_type
+from app.utils.artwork import ArtworkType, build_artwork_relative_path, is_allowed_artwork_mime_type, is_versioned
 from app.utils.enums import MetadataStatus
 from app.models.screenshot import Screenshot
 
@@ -806,9 +806,28 @@ class ArtworkService:
             "incomplete": sum(1 for item in validation if not item["complete"]),
             "repaired": repaired,
             "failed": failed,
+            "artwork_optimized": self.optimize_stored_artwork(db),
             "covers_fitted": self.fit_stored_covers(db),
             "unused_removed": self.garbage_collect_artwork(db)["deleted"],
         }
+
+    def optimize_stored_artwork(self, db: Session) -> int:
+        """Stores art saved before optimize_artwork again, converted and versioned; returns how many paths changed.
+
+        The old files are left to garbage_collect_artwork, since deduplicated art can be shared by several rows.
+        """
+        slots = [(entry, field) for entry in db.query(ArchiveEntry) for field in ("cover_path", "banner_path", "logo_path")]
+        slots += [(screenshot, "file_path") for screenshot in db.query(Screenshot)]
+        slots += [(franchise, "banner_path") for franchise in db.query(Franchise)]
+        changed = 0
+        for row, field in slots:
+            old_path = getattr(row, field)
+            if not old_path or is_versioned(old_path) or not self.storage.exists(old_path):
+                continue
+            setattr(row, field, self.storage.save(old_path, self.storage.absolute_path(old_path).read_bytes()))
+            db.commit()
+            changed += 1
+        return changed
 
     def fit_stored_covers(self, db: Session) -> int:
         """Crops saved covers that do not fit the library card; returns how many changed."""
@@ -990,20 +1009,8 @@ class ArtworkService:
             source_path = (
                 first_asset["path"]
             )
-            if not self.storage.exists(
-                canonical_path
-            ):
-                contents = (
-                    self.storage
-                    .absolute_path(
-                        source_path
-                    )
-                    .read_bytes()
-                )
-                self.storage.save(
-                    canonical_path,
-                    contents,
-                )
+            # Saving the same contents again lands on the same versioned name.
+            canonical_path = self.storage.save(canonical_path, self.storage.absolute_path(source_path).read_bytes())
             for asset in (
                 group["assets"]
             ):
@@ -1103,19 +1110,10 @@ class ArtworkService:
                         url
                     )
                 )
-                relative_path = (
-                    f"screenshots/"
-                    f"{archive.id}_"
-                    f"{index}"
-                    f"{extension}"
-                )
-                self.storage.save(
-                    relative_path,
-                    contents,
-                )
+                stored_path = self.storage.save(f"screenshots/{archive.id}_{index}{extension}", contents)
                 screenshot = Screenshot(
                     archive_entry_id=archive.id,
-                    file_path=relative_path,
+                    file_path=stored_path,
                 )
                 db.add(
                     screenshot

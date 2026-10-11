@@ -1,6 +1,7 @@
 from pathlib import Path
 
 from app.core.config import settings
+from app.utils.artwork import optimize_artwork
 
 
 class StorageService:
@@ -9,6 +10,8 @@ class StorageService:
         self.base_dir.mkdir(parents=True, exist_ok=True)
 
     def save(self, relative_path: str, contents: bytes) -> str:
+        """Stores art and returns its path, which differs from the one asked for: see optimize_artwork."""
+        relative_path, contents = optimize_artwork(relative_path, contents)
         destination = self.base_dir.joinpath(relative_path)
         destination.parent.mkdir(parents=True, exist_ok=True)
         destination.write_bytes(contents)
