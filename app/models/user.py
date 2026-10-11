@@ -24,6 +24,8 @@ class User(Base):
     sessions_revoked_at = mapped_column(sa.DateTime(timezone=True), nullable=True)
     # Access: games marked restricted, and games in the listed collections, are invisible to this user.
     allow_restricted: bool = mapped_column(sa.Boolean, nullable=False, default=False, server_default=sa.false())
+    # With allow_restricted, shows restricted games and nothing else.
+    restricted_only: bool = mapped_column(sa.Boolean, nullable=False, default=False, server_default=sa.false())
     blocked_collection_ids: list = mapped_column(sa.JSON, nullable=False, default=list, server_default="[]")
     # Set on the default administrator: until it chooses a new password the API serves it nothing else.
     must_change_password: bool = mapped_column(sa.Boolean, nullable=False, default=False, server_default=sa.false())

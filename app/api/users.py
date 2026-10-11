@@ -86,6 +86,7 @@ def create_user(
         "is_active": data.is_active,
         "is_superuser": data.is_superuser,
         "allow_restricted": data.allow_restricted,
+        "restricted_only": data.restricted_only,
         "blocked_collection_ids": data.blocked_collection_ids,
     })
 
@@ -170,7 +171,7 @@ def update_user(
     db: Session = Depends(get_db),
 ):
     user = _get_manageable_user(db, user_id, current_user)
-    changes_access = data.role_ids is not None or data.allow_restricted is not None or data.blocked_collection_ids is not None
+    changes_access = any(value is not None for value in (data.role_ids, data.allow_restricted, data.restricted_only, data.blocked_collection_ids))
     if user.id == current_user.id and changes_access and not current_user.is_superuser:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="You cannot change your own roles or access")
     _ensure_access_grant(current_user, data.allow_restricted)
@@ -208,6 +209,9 @@ def update_user(
 
     if data.allow_restricted is not None:
         user.allow_restricted = data.allow_restricted
+
+    if data.restricted_only is not None:
+        user.restricted_only = data.restricted_only
 
     if data.blocked_collection_ids is not None:
         user.blocked_collection_ids = list(dict.fromkeys(data.blocked_collection_ids))

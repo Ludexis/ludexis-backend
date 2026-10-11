@@ -48,7 +48,9 @@ def entry_filters(user: User | None) -> list:
     if user is None:
         return []
     filters = []
-    if not user.allow_restricted:
+    if user.allow_restricted and user.restricted_only:
+        filters.append(ArchiveEntry.restricted.is_(True))
+    elif not user.allow_restricted:
         filters.append(ArchiveEntry.restricted.is_(False))
         # Nothing is known about an unidentified game, so it counts as restricted until identified or cleared by hand.
         filters.append(sa.or_(ArchiveEntry.metadata_status != MetadataStatus.UNMATCHED, ArchiveEntry.restricted_locked.is_(True)))

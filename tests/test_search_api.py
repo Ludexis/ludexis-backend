@@ -114,6 +114,22 @@ def test_user_access_hides_restricted_games_and_blocked_collections_everywhere()
     assert [len(item["entry_ids"]) for item in listed] == [2]
 
 
+def test_restricted_only_shows_just_restricted_games_and_needs_restricted_access():
+    word, *_ = seed_entries()
+    admin = auth_headers()
+    games = {game["title"].split()[0]: game["id"] for game in client.get("/api/search/", params={"q": word}, headers=admin).json()}
+    client.patch(f"/api/archive-entries/{games['b']}", json={"restricted": True}, headers=admin)
+    client.patch(f"/api/archive-entries/{games['c']}", json={"restricted": False}, headers=admin)
+
+    user_id, viewer = viewer_headers(admin, allow_restricted=True, restricted_only=True)
+    assert titles(client.get("/api/search/", params={"q": word}, headers=viewer)) == ["b"]
+    assert client.get(f"/api/archive-entries/{games['c']}", headers=viewer).status_code == 404
+
+    # Taking restricted access away hides restricted games again, whatever restricted_only says.
+    client.patch(f"/api/users/{user_id}", json={"allow_restricted": False}, headers=admin)
+    assert titles(client.get("/api/search/", params={"q": word}, headers=viewer)) == ["c"]
+
+
 def test_unidentified_games_stay_restricted_until_identified_or_cleared_by_hand():
     word, *_ = seed_entries()
     admin = auth_headers()

@@ -11,6 +11,7 @@ class UserBase(BaseModel):
     is_active: bool = True
     is_superuser: bool = False
     allow_restricted: bool = False
+    restricted_only: bool = False
     # Games in these collections are hidden from the user.
     blocked_collection_ids: list[str] = []
 
@@ -43,6 +44,7 @@ class UserUpdate(BaseModel):
     is_superuser: bool | None = None
     role_ids: list[str] | None = None
     allow_restricted: bool | None = None
+    restricted_only: bool | None = None
     blocked_collection_ids: list[str] | None = None
 
     model_config = {
