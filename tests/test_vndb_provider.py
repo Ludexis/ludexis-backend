@@ -83,6 +83,17 @@ def test_details_filter_tags_and_strip_markup():
 
 
 @patch.object(vndb, "MIN_INTERVAL_SECONDS", 0)
+def test_the_release_content_flag_makes_a_vn_restricted():
+    def details(*releases):
+        vn = response([{"id": "v100", "title": "Quiet Meadow"}])
+        with patch("app.providers.vndb.requests.post", side_effect=[vn, response(list(releases))]):
+            return VNDBProvider().get_details("v100")
+
+    assert details({"has_ero": False}).restricted is False
+    assert details({"has_ero": False}, {"has_ero": True}).restricted is True
+
+
+@patch.object(vndb, "MIN_INTERVAL_SECONDS", 0)
 def test_unreachable_vndb_backs_off():
     with patch("app.providers.vndb.requests.post", side_effect=requests.ConnectionError) as post:
         assert VNDBProvider().search("anything") == []

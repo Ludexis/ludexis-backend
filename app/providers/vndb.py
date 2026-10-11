@@ -20,8 +20,6 @@ TAG_LIMIT = 15
 COVER_IMAGE_TYPES = {"pkgfront", "dig"}
 MAX_RELEASE_COVERS = 4
 MIN_TAG_RATING = 2.0
-# Releases rated for this age or above make the game restricted.
-RESTRICTED_AGE = 18
 DETAIL_FIELDS = (
     "title, description, released, developers.name, tags.name, tags.rating, tags.spoiler, "
     "image.url, screenshots.url"
@@ -103,7 +101,7 @@ class VNDBProvider(MetadataProvider):
         image = vn.get("image") or {}
         # A VN's main image is often a landscape banner; its releases' package fronts are true covers.
         releases = self._query(
-            {"filters": ["vn", "=", ["id", "=", external_id]], "fields": "images.url, images.type, minage", "results": 25},
+            {"filters": ["vn", "=", ["id", "=", external_id]], "fields": "images.url, images.type, has_ero", "results": 25},
             "release",
         )
         fronts = [
@@ -122,5 +120,6 @@ class VNDBProvider(MetadataProvider):
             tags=[tag["name"] for tag in tags[:TAG_LIMIT]],
             cover_urls=list(dict.fromkeys(fronts[:MAX_RELEASE_COVERS] + ([image["url"]] if image.get("url") else []))),
             artwork_urls=[shot["url"] for shot in vn.get("screenshots", []) if shot.get("url")],
-            restricted=any((release.get("minage") or 0) >= RESTRICTED_AGE for release in releases),
+            # The releases' content flag decides, not their age rating.
+            restricted=any(release.get("has_ero") for release in releases),
         )
