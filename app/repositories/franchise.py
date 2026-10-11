@@ -37,6 +37,32 @@ class FranchiseRepository(BaseRepository[Franchise]):
         )
         return dict(rows)
 
+    def auto_images(self, db: Session, franchise_ids: list[str], viewer=None) -> dict[str, str]:
+        """For each franchise, the banner of its first released game this user can see."""
+        if not franchise_ids:
+            return {}
+        rows = (
+            db.query(ArchiveEntry.franchise_id, ArchiveEntry.banner_path)
+            .filter(
+                ArchiveEntry.franchise_id.in_(franchise_ids),
+                ArchiveEntry.deleted_at.is_(None),
+                ArchiveEntry.banner_path.isnot(None),
+                *entry_filters(viewer),
+            )
+            .distinct(ArchiveEntry.franchise_id)
+            .order_by(ArchiveEntry.franchise_id, ArchiveEntry.release_date.asc().nulls_last(), ArchiveEntry.title)
+            .all()
+        )
+        return dict(rows)
+
+    def visible_entries(self, db: Session, franchise_id: str, viewer=None) -> list[ArchiveEntry]:
+        return (
+            db.query(ArchiveEntry)
+            .filter(ArchiveEntry.franchise_id == franchise_id, ArchiveEntry.deleted_at.is_(None), *entry_filters(viewer))
+            .order_by(ArchiveEntry.release_date.asc().nulls_last(), ArchiveEntry.title)
+            .all()
+        )
+
     def count_entries_for_id(self, db: Session, franchise_id: str, viewer=None) -> int:
         return (
             db.query(sa.func.count(ArchiveEntry.id))

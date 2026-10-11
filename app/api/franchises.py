@@ -1,9 +1,11 @@
-from fastapi import APIRouter, Depends, HTTPException, Response, status
+from fastapi import APIRouter, Depends, File, HTTPException, Response, UploadFile, status
 from sqlalchemy.orm import Session
 
+from app.core.access import acting_as
 from app.core.auth import get_current_active_user, require_permission
 from app.db.session import get_db
-from app.schemas.franchise import FranchiseCreate, FranchiseRead, FranchiseUpdate
+from app.models.franchise import Franchise
+from app.schemas.franchise import FranchiseCreate, FranchiseImageSource, FranchiseRead, FranchiseUpdate
 from app.services.audit import AuditService
 from app.services.franchise import FranchiseService
 from app.utils.enums import PermissionName
@@ -130,3 +132,92 @@ def delete_franchise(
         entity_id=franchise.id,
         details=f"Deleted franchise {franchise.name}",
     )
+
+
+def _editable(db: Session, franchise_id: str) -> Franchise:
+    franchise = service.get(db, franchise_id)
+    if franchise is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Franchise not found")
+    return franchise
+
+
+def _image_changed(db: Session, current_user, franchise: Franchise, details: str) -> Franchise:
+    audit_service.record(db, current_user, action="update", entity="Franchise", entity_id=franchise.id, details=details)
+    return service.get(db, franchise.id, current_user)
+
+
+@router.get(
+    "/{franchise_id}/image-candidates",
+    response_model=list[str],
+    summary="List franchise image candidates",
+    description="Wide images to choose from: the franchise's games' banners, SteamGridDB art for a game of the same name, then the games' screenshots. Stored paths are relative to the media root; the rest are URLs.",
+    response_description="Candidate images, best first.",
+)
+def list_franchise_image_candidates(
+    franchise_id: str,
+    current_user=Depends(require_permission(PermissionName.EDIT_METADATA)),
+    db: Session = Depends(get_db),
+):
+    franchise = _editable(db, franchise_id)
+    with acting_as(current_user.id):
+        return service.image_candidates(db, franchise, current_user)
+
+
+@router.put(
+    "/{franchise_id}/image",
+    response_model=FranchiseRead,
+    summary="Choose franchise image",
+    description="Copy one of the offered candidates in as the franchise's image.",
+    response_description="Franchise updated.",
+)
+def choose_franchise_image(
+    franchise_id: str,
+    data: FranchiseImageSource,
+    current_user=Depends(require_permission(PermissionName.EDIT_METADATA)),
+    db: Session = Depends(get_db),
+):
+    franchise = _editable(db, franchise_id)
+    try:
+        with acting_as(current_user.id):
+            service.set_image(db, franchise, data.source, current_user)
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    return _image_changed(db, current_user, franchise, f"Chose an image for franchise {franchise.name}")
+
+
+@router.post(
+    "/{franchise_id}/image",
+    response_model=FranchiseRead,
+    summary="Upload franchise image",
+    description="Upload an image for the franchise. Accepts multipart form data.",
+    response_description="Franchise updated.",
+)
+def upload_franchise_image(
+    franchise_id: str,
+    file: UploadFile = File(..., description="Image file"),
+    current_user=Depends(require_permission(PermissionName.EDIT_METADATA)),
+    db: Session = Depends(get_db),
+):
+    franchise = _editable(db, franchise_id)
+    try:
+        service.upload_image(db, franchise, file)
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    return _image_changed(db, current_user, franchise, f"Uploaded an image for franchise {franchise.name}")
+
+
+@router.delete(
+    "/{franchise_id}/image",
+    response_model=FranchiseRead,
+    summary="Reset franchise image",
+    description="Remove the chosen image; the franchise shows one of its games' banners again.",
+    response_description="Franchise updated.",
+)
+def reset_franchise_image(
+    franchise_id: str,
+    current_user=Depends(require_permission(PermissionName.EDIT_METADATA)),
+    db: Session = Depends(get_db),
+):
+    franchise = _editable(db, franchise_id)
+    service.clear_image(db, franchise)
+    return _image_changed(db, current_user, franchise, f"Reset the image of franchise {franchise.name}")

@@ -8,6 +8,7 @@ import hashlib
 
 from app.core.config import settings
 from app.models.archive_entry import ArchiveEntry
+from app.models.franchise import Franchise
 from app.models.screenshot import Screenshot
 from app.models.user import User
 from app.repositories.archive_entry import ArchiveEntryRepository
@@ -1058,7 +1059,7 @@ class ArtworkService:
         }
     
     def garbage_collect_artwork(self, db: Session) -> dict:
-        """Delete stored images no entry or screenshot points at: art left by removed entries or interrupted saves."""
+        """Delete stored images no entry, screenshot or franchise points at: art left by removed entries or interrupted saves."""
         referenced = {
             path.replace("\\", "/")
             for row in db.query(ArchiveEntry.cover_path, ArchiveEntry.banner_path, ArchiveEntry.logo_path).all()
@@ -1066,6 +1067,7 @@ class ArtworkService:
             if path
         }
         referenced.update(path.replace("\\", "/") for (path,) in db.query(Screenshot.file_path).all() if path)
+        referenced.update(path.replace("\\", "/") for (path,) in db.query(Franchise.banner_path).all() if path)
         cutoff = time.time() - ORPHAN_MIN_AGE_SECONDS
         deleted = kept = 0
         for file_path in self.storage.base_dir.rglob("*"):
