@@ -140,9 +140,10 @@ class IGDBProvider(MetadataProvider):
             url = (
                 "https:" + cover["url"]
             )
+            # Double size (528 px wide): the single size looks soft on large and high-density screens.
             url = url.replace(
                 "t_thumb",
-                "t_cover_big",
+                "t_cover_big_2x",
             )
             cover_urls.append(
                 url
