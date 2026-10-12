@@ -33,13 +33,13 @@ KNOWN_FLAGS = {
 
 # Packaging, platform and distribution tags that never belong to a game's title.
 NOISE_TOKENS = {
-    "pc", "win", "windows", "win32", "win64", "x64", "x86", "mac", "osx", "linux", "android",
+    "pc", "win", "windows", "win32", "win64", "x64", "x86", "mac", "osx", "linux", "android", "apk",
     "compressed", "wincompress", "patreon", "steam", "gog", "igdb", "manual", "dlc",
     "ultimate", "gold", "complete", "definitive", "enhanced", "goty", "edition",
     "wip", "public", "uncensored", "censored", "r18", "18+",
 }
 # Release-status words that are only noise at the end of a name ("Some Game Final", not "Final Saga").
-TRAILING_NOISE = {"final", "fixed", "build", "release", "full", "completed"}
+TRAILING_NOISE = {"final", "fixed", "build", "release", "full", "completed", "old", "regular", "unrated", "patched", "cracked"}
 # Small words stay lowercase in titles unless they come first.
 SMALL_WORDS = {"a", "an", "the", "of", "and", "or", "in", "on", "to", "for", "with", "at", "by"}
 # Installment words: "Episode 3", "Ch.2", "Part 2", "Season 1", "Book 2".
@@ -51,8 +51,10 @@ INSTALLMENT_WORDS = {
 
 ARCHIVE_EXTENSION = re.compile(r"\.(zip|rar|7z|iso|exe|tar\.gz|tar\.bz2)$", re.IGNORECASE)
 SEPARATOR = r"[\s._\-]"
-# Dotted versions with an optional v/V prefix and one trailing letter: v1.2, V0.22, 1.03a, v.0.73, 0.5.5c.
-DOTTED_VERSION = re.compile(rf"(?:^|{SEPARATOR})v?\.?(\d+(?:[._]\d+)+[a-z]?)(?={SEPARATOR}|$)", re.IGNORECASE)
+# Dotted versions with an optional v/V prefix and one trailing letter: v1.2, V0.22, 1.03a, v.0.73, 0.5.5c, 0-20-16.
+DOTTED_VERSION = re.compile(rf"(?:^|{SEPARATOR})v?\.?(\d+(?:[._-]\d+)+[a-z]?)(?={SEPARATOR}|$)", re.IGNORECASE)
+# Video resolution tags: 720p, 1080p.
+RESOLUTION = re.compile(rf"(?:^|{SEPARATOR})\d{{3,4}}p(?={SEPARATOR}|$)", re.IGNORECASE)
 # Numbered releases without dots: v12, Patch_19, Build 7, Update-3.
 NUMBERED_VERSION = re.compile(rf"(?:^|{SEPARATOR})(?:v|rev|release|version|patch|update|build){SEPARATOR}?(\d+[a-z]?)(?={SEPARATOR}|$)", re.IGNORECASE)
 # A version alone in brackets: [v1.0e], (v0.4), [0.5.2]. A bare number like (2019) is a year, not a version.
@@ -145,10 +147,11 @@ def _parse_name(name: str) -> tuple[str, str | None, _Installment, dict[str, str
     bracketed_version = (bracketed.group(1) or bracketed.group(2)).replace("_", ".") if bracketed else None
     name = re.sub(r"\[[^\]]*\]|\([^)]*\)", " ", name)
 
+    name = RESOLUTION.sub(" ", name)
     version = None
     match = DOTTED_VERSION.search(name) or NUMBERED_VERSION.search(name)
     if match:
-        version = match.group(1).replace("_", ".")
+        version = re.sub(r"[_-]", ".", match.group(1))
         name = name[:match.start()] + " " + name[match.end():]
     version = version or bracketed_version
     name = BUILD_NUMBER.sub(" ", name)
