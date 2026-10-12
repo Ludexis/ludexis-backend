@@ -43,6 +43,7 @@ def test_parse_archive_name(name, title, version):
         ("Early Light Demo v0.1", "Early Light", "0.1"),
         ("Quiet_Meadow-0-12-alpha-pc.7z", "Quiet Meadow", "0.12"),
         ("Quiet Meadow 0-20-16-pc.zip", "Quiet Meadow", "0.20.16"),
+        ("2048-0.31-pc.zip", "2048", "0.31"),
         ("Iron_Tide_1_3_5_Windows.7z", "Iron Tide", "1.3.5"),
         ("IronTide-EP2-v0.8-720p-pc.7z", "Iron Tide EP 2", "0.8"),
         ("Skybound Saga Part 2 OLD.zip", "Skybound Saga Part 2", None),

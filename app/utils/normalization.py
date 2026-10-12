@@ -51,8 +51,10 @@ INSTALLMENT_WORDS = {
 
 ARCHIVE_EXTENSION = re.compile(r"\.(zip|rar|7z|iso|exe|tar\.gz|tar\.bz2)$", re.IGNORECASE)
 SEPARATOR = r"[\s._\-]"
-# Dotted versions with an optional v/V prefix and one trailing letter: v1.2, V0.22, 1.03a, v.0.73, 0.5.5c, 0-20-16.
-DOTTED_VERSION = re.compile(rf"(?:^|{SEPARATOR})v?\.?(\d+(?:[._-]\d+)+[a-z]?)(?={SEPARATOR}|$)", re.IGNORECASE)
+# Dotted versions with an optional v/V prefix and one trailing letter: v1.2, V0.22, 1.03a, v.0.73, 0.5.5c.
+DOTTED_VERSION = re.compile(rf"(?:^|{SEPARATOR})v?\.?(\d+(?:[._]\d+)+[a-z]?)(?={SEPARATOR}|$)", re.IGNORECASE)
+# Versions written with dashes, only when there is no dotted one: 0-20-16 (but "2044-0.31" is title 2044, version 0.31).
+DASHED_VERSION = re.compile(rf"{SEPARATOR}v?(\d+(?:-\d+)+[a-z]?)(?={SEPARATOR}|$)", re.IGNORECASE)
 # Video resolution tags: 720p, 1080p.
 RESOLUTION = re.compile(rf"(?:^|{SEPARATOR})\d{{3,4}}p(?={SEPARATOR}|$)", re.IGNORECASE)
 # Numbered releases without dots: v12, Patch_19, Build 7, Update-3.
@@ -149,7 +151,7 @@ def _parse_name(name: str) -> tuple[str, str | None, _Installment, dict[str, str
 
     name = RESOLUTION.sub(" ", name)
     version = None
-    match = DOTTED_VERSION.search(name) or NUMBERED_VERSION.search(name)
+    match = DOTTED_VERSION.search(name) or DASHED_VERSION.search(name) or NUMBERED_VERSION.search(name)
     if match:
         version = re.sub(r"[_-]", ".", match.group(1))
         name = name[:match.start()] + " " + name[match.end():]
