@@ -62,6 +62,12 @@ def test_covers_keep_their_bytes_and_saving_again_keeps_one_version():
     assert optimize_artwork("covers/e1.jpg", cover + b"\0")[0] != path
 
 
+def test_a_wide_avif_banner_becomes_a_1920_px_webp():
+    path, contents = optimize_artwork("banners/e1.avif", encoded(noisy(3840, 1240), "AVIF"))
+
+    assert path.endswith(".webp") and (opened(contents).format, opened(contents).size) == ("WEBP", (1920, 620))
+
+
 def test_webp_and_unreadable_files_are_stored_unchanged():
     webp = encoded(noisy(800, 400), "WEBP")
     assert optimize_artwork("banners/e1.webp", webp)[1] == webp

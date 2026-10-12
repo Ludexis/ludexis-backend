@@ -52,7 +52,7 @@ def _to_webp(contents: bytes, folders: set[str]) -> bytes | None:
     try:
         image = Image.open(BytesIO(contents))
         # Art that is already WebP is never encoded twice; GIF and SVG are kept too.
-        if image.format not in ("JPEG", "PNG"):
+        if image.format not in ("JPEG", "PNG", "AVIF"):
             return None
         image.load()
     except Exception:

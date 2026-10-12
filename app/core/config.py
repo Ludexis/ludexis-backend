@@ -39,6 +39,7 @@ class Settings(BaseSettings):
         "image/png",
         "image/webp",
         "image/gif",
+        "image/avif",
     ]
 
     # Left empty, a random secret is generated once and kept in CONFIG_DIR, shared by every container.
