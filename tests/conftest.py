@@ -125,13 +125,16 @@ def no_celery_broker(monkeypatch):
 
 
 class _MemoryRedis:
-    """Enough of Redis for the login rate limiter, fresh for every test."""
+    """Enough of Redis for the login rate limiter and provider notices, fresh for every test."""
 
     def __init__(self):
         self.values = {}
 
     def get(self, key):
         return self.values.get(key)
+
+    def set(self, key, value, ex=None):
+        self.values[key] = value
 
     def incr(self, key):
         self.values[key] = int(self.values.get(key, 0)) + 1
@@ -151,7 +154,10 @@ class _MemoryRedis:
 def isolated_login_limiter(monkeypatch):
     from app.api import auth
 
+    from app.providers import notices
+
     monkeypatch.setattr(auth.login_limiter, "_client", _MemoryRedis())
+    monkeypatch.setattr(notices, "_client", _MemoryRedis())
 
 
 @pytest.fixture(autouse=True)

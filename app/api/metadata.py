@@ -4,7 +4,8 @@ from sqlalchemy.orm import Session
 from app.core.auth import get_current_active_user
 from app.core.dependencies import get_metadata_service
 from app.db.session import get_db
-from app.schemas.metadata import MetadataDetails, MetadataSearchResult
+from app.providers.notices import get_notices
+from app.schemas.metadata import MetadataDetails, MetadataSearchResult, ProviderNotice
 from app.core.access import acting_as, restricted_providers, restricted_sources_allowed
 from app.services.metadata import MetadataService
 from app.services.settings import SettingsService
@@ -60,6 +61,21 @@ def list_match_providers(
 ):
     with acting_as(current_user.id):
         return SettingsService().match_providers(db)
+
+
+@router.get(
+    "/notices",
+    response_model=list[ProviderNotice],
+    summary="List provider notices",
+    description="Current warnings from the enabled providers this account may use, such as an expired sign-in or a reached rate limit.",
+    response_description="Provider notices.",
+)
+def list_provider_notices(
+    current_user=Depends(get_current_active_user),
+    db: Session = Depends(get_db),
+):
+    with acting_as(current_user.id):
+        return get_notices(SettingsService().match_providers(db))
 
 
 @router.get(

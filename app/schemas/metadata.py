@@ -1,4 +1,4 @@
-from datetime import date
+from datetime import date, datetime
 
 from pydantic import BaseModel
 
@@ -30,3 +30,9 @@ class MetadataDetails(BaseModel):
     artwork_urls: list[str] = []
     # The source rates the game for restricted audiences only.
     restricted: bool = False
+
+
+class ProviderNotice(BaseModel):
+    provider: str
+    message: str
+    expires_at: datetime | None = None
