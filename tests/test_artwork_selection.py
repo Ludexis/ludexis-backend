@@ -209,3 +209,29 @@ def test_scheduled_validation_checks_every_entry():
 
     assert results[entry.id]["missing_types"] == ["cover", "banner", "logo"]
     db.close()
+
+
+def test_validation_reports_screenshot_rows_without_files():
+    import uuid
+
+    from app.models.archive_entry import ArchiveEntry
+    from app.models.screenshot import Screenshot
+    from tests.test_db import TestingSessionLocal
+
+    db = TestingSessionLocal()
+    service = ArtworkService()
+    entry = ArchiveEntry(title="Iron Tide", file_path=f"D:/Tmp/{uuid.uuid4()}.zip")
+    db.add(entry)
+    db.commit()
+    kept = service.storage.save(f"screenshots/{entry.id}_1.png", b"kept")
+    db.add(Screenshot(archive_entry_id=entry.id, file_path=kept))
+    db.commit()
+
+    assert "screenshots" not in {r["archive_id"]: r for r in service.validate_all_artwork(db)}[entry.id]["missing_types"]
+
+    db.add(Screenshot(archive_entry_id=entry.id, file_path=f"screenshots/{entry.id}_2.png"))
+    db.commit()
+    db.refresh(entry)
+
+    assert "screenshots" in {r["archive_id"]: r for r in service.validate_all_artwork(db)}[entry.id]["missing_types"]
+    db.close()

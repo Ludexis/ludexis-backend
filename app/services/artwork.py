@@ -767,6 +767,9 @@ class ArtworkService:
                     corrupt_types.append(
                         artwork_type.value
                     )
+            # Rows copied from another server arrive without their files; fetching them again replaces the whole set.
+            if any(not self.storage.exists(screenshot.file_path) for screenshot in entry.screenshots):
+                missing_types.append("screenshots")
             results.append(
                 {
                     "archive_id": entry.id,
