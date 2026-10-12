@@ -7,7 +7,7 @@ from app.schemas.archive_entry import (
     ArchiveEntryCreate, ArchiveEntryFlags, ArchiveEntryFlagsUpdate, ArchiveEntryRead, ArchiveEntryUpdate, ArchiveIdentifyRequest, ArchiveIdentifyResult, ArchiveLocationResult, ArchiveMetadataUpdate,
 )
 from app.schemas.screenshot import ScreenshotRead
-from app.core.access import RESTRICTED_PROVIDERS, acting_as, annotate_flags, restricted_sources_allowed, set_flags
+from app.core.access import acting_as, annotate_flags, restricted_providers, restricted_sources_allowed, set_flags
 from app.services.archive_entry import ArchiveEntryService
 from app.services.audit import AuditService
 from app.utils.enums import PermissionName
@@ -249,7 +249,7 @@ def identify_archive_entry(
     if entry is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Archive entry not found")
     with acting_as(current_user.id):
-        if data.provider in RESTRICTED_PROVIDERS and not restricted_sources_allowed(db):
+        if data.provider in restricted_providers() and not restricted_sources_allowed(db):
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Provider not available to this account")
         updated = MetadataService().identify(db, entry, data.provider, data.provider_id)
     if updated is None:

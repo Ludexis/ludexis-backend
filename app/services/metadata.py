@@ -6,11 +6,12 @@ from app.models.archive_entry import ArchiveEntry
 from app.utils.enums import MetadataStatus
 from app.providers import IGDBProvider, ManualProvider, SteamProvider, VNDBProvider
 from app.providers.metadata_provider import MetadataProvider
+from app.providers.plugins import load_plugin_providers
 from app.schemas.metadata import MetadataDetails, MetadataSearchResult
 from app.services.grouping import GroupingService
 from app.utils.normalization import company_key
 from app.services.metadata_conflict import MetadataConflictResolver
-from app.core.access import RESTRICTED_PROVIDERS, restricted_sources_allowed
+from app.core.access import restricted_providers, restricted_sources_allowed
 from app.services.settings import SettingsService
 
 from app.models.genre import Genre
@@ -62,6 +63,7 @@ class MetadataService:
             IGDBProvider(),
             SteamProvider(),
             ManualProvider(),
+            *load_plugin_providers(),
         ]
         self.conflict_resolver = (MetadataConflictResolver())
         self.providers.sort(key=lambda provider: provider.priority)
@@ -278,7 +280,7 @@ class MetadataService:
             providers = self._match_providers(db)
         else:
             provider = self._get_provider(provider_name)
-            blocked = provider is not None and provider.name in RESTRICTED_PROVIDERS and not restricted_sources_allowed(db)
+            blocked = provider is not None and provider.name in restricted_providers() and not restricted_sources_allowed(db)
             providers = [provider] if provider and not blocked else []
         results = []
         for provider in providers:
@@ -478,7 +480,7 @@ class MetadataService:
             if match is None or score < PARTIAL_THRESHOLD:
                 return None
             provider_name, provider_id = match.provider, match.provider_id
-        if db is not None and provider_name in RESTRICTED_PROVIDERS and not restricted_sources_allowed(db):
+        if db is not None and provider_name in restricted_providers() and not restricted_sources_allowed(db):
             return None
 
         primary = self.get_details(provider_name, provider_id)

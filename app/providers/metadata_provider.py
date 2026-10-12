@@ -11,6 +11,8 @@ class MetadataProvider(ABC):
 
     name: str
     priority: int = 100
+    # Records and art from this source may hold restricted content; only users allowed it see it used.
+    restricted: bool = False
 
     @abstractmethod
     def search(self, query: str, limit: int = 20, developer: str | None = None) -> list[MetadataSearchResult]:

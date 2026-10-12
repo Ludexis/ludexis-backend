@@ -2,7 +2,8 @@ from sqlalchemy.orm import Session
 
 from app.core.config import settings as env
 from app.models.system import SystemSetting
-from app.core.access import RESTRICTED_PROVIDERS, restricted_sources_allowed
+from app.providers.plugins import load_plugin_providers
+from app.core.access import restricted_providers, restricted_sources_allowed
 
 DEFAULTS = {
     "server_name": "Ludexis",
@@ -12,7 +13,10 @@ DEFAULTS = {
     "igdb_client_secret": "",
     "steamgriddb_api_key": "",
 }
-MATCH_PROVIDERS = ["VNDB", "IGDB", "Steam"]
+
+
+def match_provider_names() -> list[str]:
+    return ["VNDB", "IGDB", "Steam", *(provider.name for provider in load_plugin_providers())]
 
 
 class SettingsService:
@@ -37,7 +41,7 @@ class SettingsService:
     def match_providers(self, db: Session) -> list[str]:
         """The configured order without restricted sources when the acting user may not use them."""
         allowed = restricted_sources_allowed(db)
-        return [name for name in self.get(db, "provider_order") if allowed or name not in RESTRICTED_PROVIDERS]
+        return [name for name in self.get(db, "provider_order") if allowed or name not in restricted_providers()]
 
     def steamgriddb_key(self, db: Session) -> str:
         return env.STEAMGRIDDB_API_KEY or self.get(db, "steamgriddb_api_key")
@@ -47,7 +51,7 @@ class SettingsService:
         return {
             "server_name": self.get(db, "server_name"),
             "provider_order": self.get(db, "provider_order"),
-            "available_providers": MATCH_PROVIDERS,
+            "available_providers": match_provider_names(),
             "igdb_client_id": client_id,
             "igdb_configured": bool(client_id and client_secret),
             "igdb_from_env": bool(env.TWITCH_CLIENT_ID and env.TWITCH_CLIENT_SECRET),

@@ -7,7 +7,7 @@ from app.schemas.job_history import JobHistoryRead
 from app.schemas.system import ScheduledTaskRead, ScheduledTaskUpdate, SettingsRead, SettingsUpdate
 from app.services.audit import AuditService
 from app.services.scheduler import SchedulerService
-from app.services.settings import MATCH_PROVIDERS, SettingsService
+from app.services.settings import SettingsService, match_provider_names
 from app.utils.audit_actions import AuditAction
 from app.utils.enums import PermissionName
 
@@ -57,7 +57,7 @@ def read_settings(current_user=Depends(require_permission(PermissionName.ACCESS_
 def update_settings(payload: SettingsUpdate, current_user=Depends(require_permission(PermissionName.ACCESS_ADMIN)), db: Session = Depends(get_db)):
     data = payload.model_dump(exclude_unset=True)
     if "provider_order" in data:
-        unknown = set(data["provider_order"]) - set(MATCH_PROVIDERS)
+        unknown = set(data["provider_order"]) - set(match_provider_names())
         if unknown:
             raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=f"Unknown providers: {sorted(unknown)}")
         data["provider_order"] = list(dict.fromkeys(data["provider_order"]))

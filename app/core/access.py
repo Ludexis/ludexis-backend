@@ -10,10 +10,13 @@ from app.models.franchise import Franchise
 from app.models.screenshot import Screenshot
 from app.models.user import User
 from app.models.user_entry_flag import UserEntryFlag
+from app.providers.plugins import load_plugin_providers
 from app.utils.enums import MetadataStatus, PermissionName
 
-# Sources whose records and art may hold restricted content; they are used only for users allowed it.
-RESTRICTED_PROVIDERS = {"VNDB"}
+
+def restricted_providers() -> set[str]:
+    """Sources whose records and art may hold restricted content; they are used only for users allowed it."""
+    return {"VNDB"} | {provider.name for provider in load_plugin_providers() if provider.restricted}
 
 # Background jobs run as the user who started them, so provider choice follows that user's access.
 _acting_user_id: ContextVar[str | None] = ContextVar("acting_user_id", default=None)

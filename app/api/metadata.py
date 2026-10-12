@@ -5,7 +5,7 @@ from app.core.auth import get_current_active_user
 from app.core.dependencies import get_metadata_service
 from app.db.session import get_db
 from app.schemas.metadata import MetadataDetails, MetadataSearchResult
-from app.core.access import RESTRICTED_PROVIDERS, acting_as, restricted_sources_allowed
+from app.core.access import acting_as, restricted_providers, restricted_sources_allowed
 from app.services.metadata import MetadataService
 from app.services.settings import SettingsService
 
@@ -77,7 +77,7 @@ def read_metadata_details(
     db: Session = Depends(get_db),
 ):
     with acting_as(current_user.id):
-        if provider_name in RESTRICTED_PROVIDERS and not restricted_sources_allowed(db):
+        if provider_name in restricted_providers() and not restricted_sources_allowed(db):
             raise HTTPException(status_code=404, detail="Metadata not found")
     details = metadata_service.get_details(provider_name, provider_id)
     if details is None:
