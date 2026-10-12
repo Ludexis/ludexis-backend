@@ -36,6 +36,10 @@ def run_job(task, job_history_id: str, label: str, work: JobWork) -> str:
         job = JobHistoryRepository().get(db, job_history_id)
         if job is None:
             return "job not found"
+        # A message delivered again after its job ended (worker killed, job swept as stale, or cancelled before
+        # it started) must not revive the job; Celery's own retries re-run the row on purpose.
+        if job.status in (JobStatus.SUCCESS, JobStatus.FAILED, JobStatus.CANCELED) and not task.request.retries:
+            return f"job already ended ({job.status.value})"
 
         job.status = JobStatus.RUNNING
         job.details = f"{label} started"

@@ -1,6 +1,8 @@
 import uuid
 from types import SimpleNamespace
 
+import pytest
+
 from app.models.archive_entry import ArchiveEntry
 from app.models.job_history import JobHistory
 from app.providers.metadata_provider import MetadataProvider
@@ -113,6 +115,24 @@ def test_run_job_records_progress_and_retry_count(monkeypatch):
     assert job.status == JobStatus.SUCCESS
     assert job.retry_count == 2
     assert result == "Test job completed: {'processed': 4}"
+    db.close()
+
+
+@pytest.mark.parametrize("ended", [JobStatus.FAILED, JobStatus.CANCELED, JobStatus.SUCCESS])
+def test_run_job_ignores_a_redelivered_message_for_an_ended_job(monkeypatch, ended):
+    monkeypatch.setattr(job_runner, "SessionLocal", TestingSessionLocal)
+    db = TestingSessionLocal()
+    job = JobHistory(job_type=JobType.METADATA_REFRESH, status=ended, progress=0)
+    db.add(job)
+    db.commit()
+
+    def work(session, report, job_id):
+        raise AssertionError("an ended job must not run again")
+
+    job_runner.run_job(SimpleNamespace(request=SimpleNamespace(retries=0)), job.id, "Test job", work)
+
+    db.refresh(job)
+    assert job.status == ended
     db.close()
 
 
