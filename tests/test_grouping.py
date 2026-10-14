@@ -118,6 +118,8 @@ def test_a_file_matched_to_another_record_leaves_its_group(db, tmp_path):
     ScannerService().scan_full(db, scan_root=str(tmp_path))
     first, second, third = sorted(entries_for(db, tmp_path), key=lambda entry: entry.version)
     for entry, code in ((first, f"v-{name}"), (second, f"v-{name}"), (third, f"v-other-{name}")):
+        # Identify names each file after its record.
+        entry.title = code
         entry.metadata_status = MetadataStatus.MATCHED
         entry.metadata_source = "VNDB"
         entry.metadata_source_code = code
@@ -127,6 +129,24 @@ def test_a_file_matched_to_another_record_leaves_its_group(db, tmp_path):
     assert first.group_key == second.group_key != third.group_key
     assert [entry.version for entry in (first, second) if entry.is_primary_version] == ["2.0"]
     assert third.is_primary_version
+
+
+def test_files_identified_as_one_name_on_different_providers_group(db, tmp_path):
+    name, other = unique_word(), unique_word()
+    (tmp_path / f"{other} v1.0.zip").write_bytes(uuid.uuid4().bytes)
+    (tmp_path / f"{name} v2.0.zip").write_bytes(uuid.uuid4().bytes)
+    ScannerService().scan_full(db, scan_root=str(tmp_path))
+    first, second = sorted(entries_for(db, tmp_path), key=lambda entry: entry.version)
+    for entry, source in ((first, "VNDB"), (second, "IGDB")):
+        entry.title = f"{name} Saga"
+        entry.metadata_status = MetadataStatus.MATCHED
+        entry.metadata_source = source
+        entry.metadata_source_code = f"{source}-{name}"
+    db.commit()
+    GroupingService().regroup(db)
+
+    assert first.group_key == second.group_key
+    assert [entry.version for entry in (first, second) if entry.is_primary_version] == ["2.0"]
 
 
 def test_windows_paths_group_by_file_name(db):

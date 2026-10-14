@@ -34,6 +34,41 @@ def _identity(entry: ArchiveEntry) -> tuple[str, str] | None:
     return None
 
 
+def _game_keys(entry: ArchiveEntry) -> set[tuple]:
+    # A matched entry is known by its provider record and by the name it was identified as, so one game
+    # matched on two providers (or one record per episode) still counts as one.
+    identity = _identity(entry)
+    if identity is None:
+        return set()
+    keys = {("record", *identity)}
+    if title_key(entry.title):
+        keys.add(("title", title_key(entry.title)))
+    return keys
+
+
+def _components(items: list, keys) -> list[list]:
+    """The items linked to each other through any shared key, as separate groups in first-seen order."""
+    parent = list(range(len(items)))
+
+    def find(index: int) -> int:
+        while parent[index] != index:
+            parent[index] = parent[parent[index]]
+            index = parent[index]
+        return index
+
+    owner: dict = {}
+    for index, item in enumerate(items):
+        for key in keys(item):
+            if key in owner:
+                parent[find(index)] = find(owner[key])
+            else:
+                owner[key] = index
+    components: dict[int, list] = defaultdict(list)
+    for index, item in enumerate(items):
+        components[find(index)].append(item)
+    return list(components.values())
+
+
 class GroupingService:
     """Keeps versions of one game under a primary entry and gathers numbered episodes into a collection."""
 
@@ -96,37 +131,34 @@ class GroupingService:
         return stats
 
     def _merge_matched(self, groups: dict[str, list[ArchiveEntry]]) -> None:
-        # Entries matched to one provider record are one game, whatever their file names or episodes
-        # ("Game-v1_Ext" and "Game-Ep2-v3" alike). A file-name group whose entries were matched to different
-        # records is split by record, so identifying one file as another game moves only that file; its
-        # unmatched entries stay together.
+        # Entries matched to one provider record, or identified as the same name, are one game whatever their
+        # file names or episodes ("Game-v1_Ext" and "Game-Ep2-v3" alike). A file-name group whose entries were
+        # matched to different games is split by game, so identifying one file as another game moves only that
+        # file; its unmatched entries stay together.
         buckets: dict[str, list[ArchiveEntry]] = {}
-        identity_of: dict[str, tuple[str, str]] = {}
+        keys_of: dict[str, set[tuple]] = {}
         for key, members in groups.items():
-            identities = {identity for identity in map(_identity, members) if identity}
-            if len(identities) <= 1:
+            games = _components([entry for entry in members if _game_keys(entry)], _game_keys)
+            if len(games) <= 1:
                 buckets[key] = members
-                if identities:
-                    identity_of[key] = identities.pop()
+                keys_of[key] = set().union(*map(_game_keys, members))
                 continue
-            for entry in members:
-                identity = _identity(entry)
-                label = f"{key}#{identity[0]}:{identity[1]}"[:256] if identity else key
-                buckets.setdefault(label, []).append(entry)
-                if identity:
-                    identity_of[label] = identity
-
-        labels_by_identity: dict[tuple[str, str], list[str]] = defaultdict(list)
-        for label, identity in identity_of.items():
-            labels_by_identity[identity].append(label)
-        target_of = {label: min(labels) for labels in labels_by_identity.values() for label in labels}
+            unmatched = [entry for entry in members if not _game_keys(entry)]
+            if unmatched:
+                buckets[key] = unmatched
+            for game in games:
+                source, code = min(_identity(entry) for entry in game)
+                label = f"{key}#{source}:{code}"[:256]
+                buckets[label] = game
+                keys_of[label] = set().union(*map(_game_keys, game))
 
         groups.clear()
-        for label, members in buckets.items():
-            target = target_of.get(label, label)
-            for entry in members:
-                entry.group_key = target
-            groups[target].extend(members)
+        for labels in _components(list(buckets), lambda label: keys_of.get(label, ())):
+            target = min(labels)
+            for label in labels:
+                for entry in buckets[label]:
+                    entry.group_key = target
+                groups[target].extend(buckets[label])
 
     def _link_episodes(self, db: Session, members: list[ArchiveEntry]) -> None:
         # Each episode's primary version points at the next one (EPISODE), rebuilt so a new primary version takes over.
