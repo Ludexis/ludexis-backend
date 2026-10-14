@@ -14,7 +14,7 @@ from app.utils.enums import PermissionName
 from app.services.scanner import ScannerService
 from app.schemas.duplicates import DuplicateGroup
 from app.repositories.screenshot import ScreenshotRepository
-from app.services.grouping import version_order
+from app.services.grouping import version_rank
 from app.services.job import JobService
 from app.services.metadata import MetadataService
 from app.utils.audit_actions import AuditAction
@@ -78,7 +78,7 @@ def list_screenshots(
     "/{archive_entry_id}/versions",
     response_model=list[ArchiveEntryRead],
     summary="List versions",
-    description="Return every version of the entry's game, newest first.",
+    description="Return every version of the entry's game, latest episode and newest version first.",
 )
 def list_versions(
     archive_entry_id: str,
@@ -89,7 +89,7 @@ def list_versions(
     if entry is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Archive entry not found")
     versions = annotate_flags(db, current_user, service.repo.list_versions(db, entry, viewer=current_user))
-    return sorted(versions, key=lambda e: version_order(e.version), reverse=True)
+    return sorted(versions, key=version_rank, reverse=True)
 
 
 @router.get(
@@ -235,7 +235,7 @@ def override_archive_metadata(
     "/{archive_entry_id}/identify",
     response_model=ArchiveIdentifyResult,
     summary="Identify archive entry",
-    description="Match the entry, and every unlocked version of the same game, to a chosen provider record. "
+    description="Match the entry to a chosen provider record; with all_versions, every unlocked version of the same game too. "
     "Metadata is applied at once; fresh artwork is downloaded by the returned job.",
     response_description="Archive entry identified.",
 )
@@ -251,7 +251,7 @@ def identify_archive_entry(
     with acting_as(current_user.id):
         if data.provider in restricted_providers() and not restricted_sources_allowed(db):
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Provider not available to this account")
-        updated = MetadataService().identify(db, entry, data.provider, data.provider_id)
+        updated = MetadataService().identify(db, entry, data.provider, data.provider_id, all_versions=data.all_versions)
     if updated is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Provider record not found")
     job = JobService().start_job(

@@ -106,9 +106,37 @@ def test_versions_matched_to_one_record_group_despite_different_names(db, tmp_pa
 
     assert len({entry.group_key for entry in versions}) == 1
     assert [entry.version for entry in versions if entry.is_primary_version] == ["2.0"]
-    # Episodes sharing one provider record stay separate cards.
-    assert len({entry.group_key for entry in episodes}) == 2
-    assert all(entry.is_primary_version for entry in episodes)
+    # Episodes sharing one provider record are versions of one game, led by the latest episode.
+    assert len({entry.group_key for entry in episodes}) == 1
+    assert [entry.episode for entry in episodes if entry.is_primary_version] == [2]
+
+
+def test_a_file_matched_to_another_record_leaves_its_group(db, tmp_path):
+    name = unique_word()
+    for version in ("1.0", "2.0", "3.0"):
+        (tmp_path / f"{name} v{version}.zip").write_bytes(uuid.uuid4().bytes)
+    ScannerService().scan_full(db, scan_root=str(tmp_path))
+    first, second, third = sorted(entries_for(db, tmp_path), key=lambda entry: entry.version)
+    for entry, code in ((first, f"v-{name}"), (second, f"v-{name}"), (third, f"v-other-{name}")):
+        entry.metadata_status = MetadataStatus.MATCHED
+        entry.metadata_source = "VNDB"
+        entry.metadata_source_code = code
+    db.commit()
+    GroupingService().regroup(db)
+
+    assert first.group_key == second.group_key != third.group_key
+    assert [entry.version for entry in (first, second) if entry.is_primary_version] == ["2.0"]
+    assert third.is_primary_version
+
+
+def test_windows_paths_group_by_file_name(db):
+    name = unique_word()
+    entries = [ArchiveEntry(title=name, file_path=f"Z:\\{folder}\\{name} v1.{index}.zip") for index, folder in enumerate(("A", "B"))]
+    db.add_all(entries)
+    db.commit()
+    GroupingService().regroup(db)
+
+    assert entries[0].group_key == entries[1].group_key == name.lower()
 
 
 class CountingMetadataService(MetadataService):

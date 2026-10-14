@@ -34,7 +34,36 @@ def _versions(suffix):
         db.close()
 
 
-def test_identify_applies_the_match_to_every_unlocked_version():
+def _identify(entry_id, all_versions, details):
+    with patch.object(MetadataService, "get_merged_details", return_value=details):
+        return client.post(
+            f"/api/archive-entries/{entry_id}/identify",
+            headers={"Authorization": f"Bearer {_token('admin', 'Admin123!')}"},
+            json={"provider": details.provider, "provider_id": details.provider_id, "all_versions": all_versions},
+        )
+
+
+def test_identify_changes_only_the_chosen_version_and_moves_it_to_its_own_game():
+    suffix = uuid.uuid4().hex[:8]
+    first, second, _ = _versions(suffix)
+    _identify(first, True, MetadataDetails(provider="VNDB", provider_id=f"v-{suffix}", title="Quiet Meadow"))
+
+    response = _identify(second, False, MetadataDetails(provider="VNDB", provider_id=f"v-other-{suffix}", title="Iron Tide"))
+
+    assert response.status_code == 200, response.text
+    assert response.json()["updated_entries"] == 1
+    db = TestingSessionLocal()
+    try:
+        kept, moved = db.get(ArchiveEntry, first), db.get(ArchiveEntry, second)
+        assert (kept.title, kept.metadata_source_code) == ("Quiet Meadow", f"v-{suffix}")
+        assert (moved.title, moved.metadata_source_code) == ("Iron Tide", f"v-other-{suffix}")
+        assert kept.group_key != moved.group_key
+        assert kept.is_primary_version and moved.is_primary_version
+    finally:
+        db.close()
+
+
+def test_identify_can_apply_the_match_to_every_unlocked_version():
     suffix = uuid.uuid4().hex[:8]
     first, second, locked = _versions(suffix)
     details = MetadataDetails(provider="VNDB", provider_id="v42", title="Quiet Meadow", developers=[f"Pond {suffix}"])
@@ -43,7 +72,7 @@ def test_identify_applies_the_match_to_every_unlocked_version():
         response = client.post(
             f"/api/archive-entries/{first}/identify",
             headers={"Authorization": f"Bearer {_token('admin', 'Admin123!')}"},
-            json={"provider": "VNDB", "provider_id": "v42"},
+            json={"provider": "VNDB", "provider_id": "v42", "all_versions": True},
         )
 
     assert response.status_code == 200, response.text

@@ -1,7 +1,7 @@
 import re
 from collections import defaultdict
 from datetime import datetime, timezone
-from pathlib import Path
+from pathlib import PureWindowsPath
 
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
@@ -23,6 +23,17 @@ def version_order(version: str | None) -> tuple:
     return tuple((int(part), "") if part.isdigit() else (0, part) for part in re.findall(r"\d+|[a-z]+", (version or "").lower()))
 
 
+def version_rank(entry: ArchiveEntry) -> tuple:
+    # Versions of a game that spans episodes rank by episode first, so the latest episode leads the card.
+    return (entry.season or 0, entry.episode or 0, version_order(entry.version), entry.modified_time or OLDEST, entry.created_at or OLDEST)
+
+
+def _identity(entry: ArchiveEntry) -> tuple[str, str] | None:
+    if entry.metadata_source_code and entry.metadata_status in (MetadataStatus.MATCHED, MetadataStatus.MANUAL):
+        return entry.metadata_source, entry.metadata_source_code
+    return None
+
+
 class GroupingService:
     """Keeps versions of one game under a primary entry and gathers numbered episodes into a collection."""
 
@@ -35,9 +46,11 @@ class GroupingService:
         series_titles: dict[str, str] = {}
 
         # Keys come from the file name, not the title, so a user's title edit never splits a group.
+        # PureWindowsPath splits on both separators, so a catalogue scanned on Windows groups the same on Linux.
         for entry in entries:
-            parsed = parse_archive_name(Path(entry.file_path).name)
-            entry.group_key = title_key(parsed.title) or None
+            parsed = parse_archive_name(PureWindowsPath(entry.file_path).name)
+            identity = _identity(entry)
+            entry.group_key = title_key(parsed.title) or (f"#{identity[0]}:{identity[1]}" if identity else None)
             entry.episode = parsed.episode if parsed.episode is not None else parsed.part
             entry.season = parsed.season
             entry.series_key = title_key(parsed.series_title) if parsed.series_title else None
@@ -52,7 +65,7 @@ class GroupingService:
         self._merge_matched(groups)
 
         for members in groups.values():
-            primary = max(members, key=lambda e: (version_order(e.version), e.modified_time or OLDEST, e.created_at or OLDEST))
+            primary = max(members, key=version_rank)
             for entry in members:
                 entry.is_primary_version = entry is primary
 
@@ -83,35 +96,37 @@ class GroupingService:
         return stats
 
     def _merge_matched(self, groups: dict[str, list[ArchiveEntry]]) -> None:
-        # File names of one game can differ beyond the version ("Game-v1_Ext" vs "Game-v2"); groups whose
-        # entries are matched to the same provider record are one game. Episode and season stay part of the
-        # identity so episodes sharing one provider record remain separate cards.
-        keys_by_identity: dict[tuple, set[str]] = defaultdict(set)
+        # Entries matched to one provider record are one game, whatever their file names or episodes
+        # ("Game-v1_Ext" and "Game-Ep2-v3" alike). A file-name group whose entries were matched to different
+        # records is split by record, so identifying one file as another game moves only that file; its
+        # unmatched entries stay together.
+        buckets: dict[str, list[ArchiveEntry]] = {}
+        identity_of: dict[str, tuple[str, str]] = {}
         for key, members in groups.items():
+            identities = {identity for identity in map(_identity, members) if identity}
+            if len(identities) <= 1:
+                buckets[key] = members
+                if identities:
+                    identity_of[key] = identities.pop()
+                continue
             for entry in members:
-                if entry.metadata_source_code and entry.metadata_status in (MetadataStatus.MATCHED, MetadataStatus.MANUAL):
-                    identity = (entry.metadata_source, entry.metadata_source_code, entry.season, entry.episode)
-                    keys_by_identity[identity].add(key)
+                identity = _identity(entry)
+                label = f"{key}#{identity[0]}:{identity[1]}"[:256] if identity else key
+                buckets.setdefault(label, []).append(entry)
+                if identity:
+                    identity_of[label] = identity
 
-        parent: dict[str, str] = {}
+        labels_by_identity: dict[tuple[str, str], list[str]] = defaultdict(list)
+        for label, identity in identity_of.items():
+            labels_by_identity[identity].append(label)
+        target_of = {label: min(labels) for labels in labels_by_identity.values() for label in labels}
 
-        def root(key: str) -> str:
-            while parent.get(key, key) != key:
-                key = parent[key]
-            return key
-
-        for keys in keys_by_identity.values():
-            roots = {root(key) for key in keys}
-            target = min(roots)
-            for key in roots:
-                parent[key] = target
-
-        for key in list(groups):
-            target = root(key)
-            if target != key:
-                for entry in groups.pop(key):
-                    entry.group_key = target
-                    groups[target].append(entry)
+        groups.clear()
+        for label, members in buckets.items():
+            target = target_of.get(label, label)
+            for entry in members:
+                entry.group_key = target
+            groups[target].extend(members)
 
     def _link_episodes(self, db: Session, members: list[ArchiveEntry]) -> None:
         # Each episode's primary version points at the next one (EPISODE), rebuilt so a new primary version takes over.

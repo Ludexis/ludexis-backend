@@ -132,6 +132,8 @@ class ArchiveMetadataUpdate(BaseModel):
 class ArchiveIdentifyRequest(BaseModel):
     provider: str
     provider_id: str
+    # Off: only this file changes, so a version filed under the wrong game can be moved on its own.
+    all_versions: bool = False
 
 
 class ArchiveEntryRead(ArchiveEntryBase, TimestampedModel):

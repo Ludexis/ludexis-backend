@@ -295,13 +295,17 @@ class MetadataService:
             results.extend(found)
         return results
 
-    def identify(self, db: Session, archive: ArchiveEntry, provider_name: str, provider_id: str) -> list[ArchiveEntry] | None:
-        # A user-chosen match applies to every version of the game, except versions whose metadata is locked.
+    def identify(
+        self, db: Session, archive: ArchiveEntry, provider_name: str, provider_id: str, all_versions: bool = False
+    ) -> list[ArchiveEntry] | None:
+        # A user-chosen match applies to this file, or with all_versions to every version of the game except
+        # versions whose metadata is locked.
         details = self.get_merged_details(archive.title, provider_name, provider_id, db)
         if details is None:
             return None
         archive.metadata_override = False
-        targets = [archive] + [entry for entry in GroupingService().siblings(db, archive) if not entry.metadata_override]
+        siblings = GroupingService().siblings(db, archive) if all_versions else []
+        targets = [archive] + [entry for entry in siblings if not entry.metadata_override]
         for entry in targets:
             entry.title = details.title
             entry.metadata_source = details.provider
@@ -309,7 +313,7 @@ class MetadataService:
             entry.metadata_status = MetadataStatus.MATCHED
             entry.metadata_confidence = 1.0
             self.refresh_archive(db, entry, details)
-        # The new match can join this entry to versions whose file names differ.
+        # The new match can join this entry to versions whose file names differ, or move it out of its old group.
         GroupingService().regroup(db)
         logger.info(
             "Archive identified",
