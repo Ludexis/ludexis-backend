@@ -2,7 +2,7 @@
 
 Some sources ship landscape key art as a "cover", or pad it into a portrait canvas with blurred or flat
 bars. Both look wrong on a 2:3 card, so the picture area is found first and, when it is not portrait,
-cropped to 2:3 around its most detailed part.
+cropped to 2:3 around its most detailed part. Covers are stills, so an animation becomes its most detailed frame.
 """
 
 from io import BytesIO
@@ -16,7 +16,9 @@ RATIO_TOLERANCE = 0.15
 MIN_BAR = 0.08
 MAX_BAR_DIFFERENCE = 0.12
 SAMPLE_WIDTH = 96
-FORMATS = {"JPEG": "JPEG", "PNG": "PNG", "WEBP": "WEBP"}
+# Formats a fitted cover keeps; anything else Pillow reads (AVIF, GIF, ...) is stored as WebP.
+EXTENSIONS = {"JPEG": ".jpg", "PNG": ".png", "WEBP": ".webp"}
+STILL_SAMPLES = 8
 
 
 def _energy(image: Image.Image) -> tuple[list[float], list[float]]:
@@ -89,35 +91,53 @@ def _best_window(energy: list[float], window: int) -> int:
     return best
 
 
-def fit_cover(contents: bytes) -> bytes | None:
-    """A 2:3 crop of off-shape cover art, or None when it already fits the card (or is not a raster image)."""
+def _still(image: Image.Image) -> Image.Image:
+    """The most detailed of a few frames of an animation; its first frame is often a blank fade-in."""
+    frames = getattr(image, "n_frames", 1)
+    best, best_score = image, -1.0
+    for index in range(0, frames, max(1, frames // STILL_SAMPLES)):
+        image.seek(index)
+        frame = image.convert("RGBA")
+        score = sum(_energy(frame)[0])
+        if score > best_score:
+            best, best_score = frame, score
+    return best
+
+
+def fit_cover(contents: bytes) -> tuple[bytes, str] | None:
+    """A 2:3 still of cover art and its file extension, or None when the art already fits the card as it is
+    (or is not a raster image)."""
     try:
         with Image.open(BytesIO(contents)) as image:
-            image_format = FORMATS.get(image.format or "")
-            if image_format is None:
-                return None
+            animated = getattr(image, "n_frames", 1) > 1
+            image_format = image.format if image.format in EXTENSIONS and not animated else "WEBP"
             image.load()
-            box = content_box(image)
+            picture = _still(image) if animated else image
+            box = content_box(picture)
             left, top, right, bottom = box
             ratio = (right - left) / (bottom - top)
-            if fits_card(ratio) and box == (0, 0, *image.size):
-                return None
-            picture = image.crop(box)
-            rows, columns = _energy(picture)
-            if ratio > CARD_RATIO:
-                width = round(picture.height * CARD_RATIO)
-                start = _best_window(columns, round(width * len(columns) / picture.width))
-                x = min(round(start * picture.width / len(columns)), picture.width - width)
-                picture = picture.crop((x, 0, x + width, picture.height))
+            if fits_card(ratio) and box == (0, 0, *picture.size):
+                if not animated:
+                    return None
             else:
-                height = round(picture.width / CARD_RATIO)
-                start = _best_window(rows, round(height * len(rows) / picture.height))
-                y = min(round(start * picture.height / len(rows)), picture.height - height)
-                picture = picture.crop((0, y, picture.width, y + height))
+                picture = picture.crop(box)
+                rows, columns = _energy(picture)
+                if ratio > CARD_RATIO:
+                    width = round(picture.height * CARD_RATIO)
+                    start = _best_window(columns, round(width * len(columns) / picture.width))
+                    x = min(round(start * picture.width / len(columns)), picture.width - width)
+                    picture = picture.crop((x, 0, x + width, picture.height))
+                else:
+                    height = round(picture.width / CARD_RATIO)
+                    start = _best_window(rows, round(height * len(rows) / picture.height))
+                    y = min(round(start * picture.height / len(rows)), picture.height - height)
+                    picture = picture.crop((0, y, picture.width, y + height))
             if image_format == "JPEG" and picture.mode not in ("RGB", "L"):
                 picture = picture.convert("RGB")
+            elif picture.mode not in ("RGB", "RGBA", "L", "LA"):
+                picture = picture.convert("RGBA" if "transparency" in picture.info else "RGB")
             output = BytesIO()
             picture.save(output, format=image_format, quality=92)
-            return output.getvalue()
+            return output.getvalue(), EXTENSIONS[image_format]
     except Exception:
         return None

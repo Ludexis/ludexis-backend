@@ -1,4 +1,4 @@
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 import time
 import requests
 from fastapi import UploadFile
@@ -21,7 +21,7 @@ from app.services.settings import SettingsService
 from app.providers.steamgriddb import SteamGridDBClient
 from app.utils.cover_fit import content_ratio, fit_cover
 from app.utils.normalization import title_key
-from app.utils.artwork import ArtworkType, build_artwork_relative_path, is_allowed_artwork_mime_type, is_versioned
+from app.utils.artwork import VERSION_PATTERN, ArtworkType, build_artwork_relative_path, is_allowed_artwork_mime_type, is_versioned
 from app.utils.enums import MetadataStatus
 from app.models.screenshot import Screenshot
 
@@ -50,6 +50,17 @@ class ArtworkService:
         self.screenshot_repo = ScreenshotRepository()
         self.storage = StorageService()
         self.metadata_service = metadata_service or MetadataService()
+
+    def _as_card(self, relative_path: str, contents: bytes) -> tuple[str, bytes]:
+        # Cover art that does not fit the card is cropped to it and an animation becomes a still; the new
+        # name ("-card") keeps browsers from showing the old file they cached.
+        fitted = fit_cover(contents)
+        if fitted is None:
+            return relative_path, contents
+        contents, extension = fitted
+        path = PurePosixPath(relative_path.replace("\\", "/"))
+        stem = VERSION_PATTERN.sub("", path.stem).removesuffix("-card")
+        return str(path.with_name(f"{stem}-card{extension}")), contents
 
     def _entry_details(self, entry: ArchiveEntry) -> MetadataDetails | None:
         # Prefer the stored provider match; fall back to a title search only for entries without one.
@@ -205,15 +216,13 @@ class ArtworkService:
             return True
 
         details = details or self._entry_details(entry)
-        if (
-            details is None
-            or
-            not details.cover_urls
-        ):
+        # A game whose sources offer no cover gets one cut from its banner.
+        candidates = (details.cover_urls or details.banner_urls) if details else []
+        if not candidates:
             return False
 
         artwork_url = (
-            self._select_best_url(details.cover_urls, "portrait")
+            self._select_best_url(candidates, "portrait")
         )
         if artwork_url is None:
             return False
@@ -222,16 +231,8 @@ class ArtworkService:
                 artwork_url
             )
         )
-        # With no portrait art on offer, the best image is cropped to the card; a new name keeps
-        # browsers from showing the old file they cached.
-        fitted = fit_cover(contents)
-        relative_path = (
-            f"covers/"
-            f"{entry.id}"
-            f"{'-card' if fitted else ''}"
-            f"{extension}"
-        )
-        contents = fitted or contents
+        # With no portrait art on offer, the best image is cropped to the card.
+        relative_path, contents = self._as_card(f"covers/{entry.id}{extension}", contents)
         stored_path = (
             self.storage.save(
                 relative_path,
@@ -526,6 +527,8 @@ class ArtworkService:
 
         contents = self._read_file(file)
         relative_path = build_artwork_relative_path(archive_entry_id, artwork_type, file.filename)
+        if artwork_type == ArtworkType.COVER:
+            relative_path, contents = self._as_card(relative_path, contents)
         stored_path = self.storage.save(relative_path, contents)
 
         if artwork_type == ArtworkType.SCREENSHOT:
@@ -603,6 +606,8 @@ class ArtworkService:
         if existing_path:
             self.storage.delete(existing_path)
         relative_path = build_artwork_relative_path(archive_entry_id, artwork_type, file.filename)
+        if artwork_type == ArtworkType.COVER:
+            relative_path, contents = self._as_card(relative_path, contents)
         setattr(entry, asset_field, self.storage.save(relative_path, contents))
         db.add(entry)
         db.commit()
@@ -640,13 +645,12 @@ class ArtworkService:
             contents, extension = self._download_artwork_url(url)
         except requests.RequestException as exc:
             raise ValueError("The image could not be downloaded") from exc
-        fitted = fit_cover(contents) if artwork_type == ArtworkType.COVER else None
-        contents = fitted or contents
+        relative_path = build_artwork_relative_path(entry.id, artwork_type, f"art{extension}")
+        if artwork_type == ArtworkType.COVER:
+            relative_path, contents = self._as_card(relative_path, contents)
         asset_field = f"{artwork_type.value}_path"
         existing_path = getattr(entry, asset_field, None)
-        stored_path = self.storage.save(
-            build_artwork_relative_path(entry.id, artwork_type, f"art{'-card' if fitted else ''}{extension}"), contents
-        )
+        stored_path = self.storage.save(relative_path, contents)
         if existing_path and existing_path != stored_path:
             self.storage.delete(existing_path)
         setattr(entry, asset_field, stored_path)
@@ -834,17 +838,17 @@ class ArtworkService:
         return changed
 
     def fit_stored_covers(self, db: Session) -> int:
-        """Crops saved covers that do not fit the library card; returns how many changed."""
+        """Crops saved covers that do not fit the library card, and turns animated ones into stills; returns how many changed."""
         fitted_count = 0
         for entry in self.entry_repo.list_active(db, limit=None):
             if not entry.cover_path or not self.storage.exists(entry.cover_path):
                 continue
-            fitted = fit_cover(self.storage.absolute_path(entry.cover_path).read_bytes())
-            if fitted is None:
-                continue
             old_path = entry.cover_path
-            stem, dot, extension = old_path.rpartition(".")
-            entry.cover_path = self.storage.save(f"{stem}-card{dot}{extension}", fitted)
+            contents = self.storage.absolute_path(old_path).read_bytes()
+            relative_path, fitted = self._as_card(old_path, contents)
+            if fitted is contents:
+                continue
+            entry.cover_path = self.storage.save(relative_path, fitted)
             if entry.cover_path != old_path:
                 self.storage.delete(old_path)
             db.add(entry)

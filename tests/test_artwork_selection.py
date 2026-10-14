@@ -66,6 +66,30 @@ def test_replacing_artwork_drops_a_slot_the_new_match_does_not_offer():
     db.close()
 
 
+def test_a_game_without_a_cover_gets_one_cut_from_its_banner():
+    import uuid
+
+    from app.models.archive_entry import ArchiveEntry
+    from app.schemas.metadata import MetadataDetails
+    from tests.test_db import TestingSessionLocal
+
+    db = TestingSessionLocal()
+    entry = ArchiveEntry(title="Iron Tide", file_path=f"D:/Tmp/{uuid.uuid4()}.zip")
+    db.add(entry)
+    db.commit()
+    saved = {}
+    service = FakeArtworkService()
+    service.storage.save = lambda path, contents: saved.setdefault(path, contents) and path
+    details = MetadataDetails(provider="VNDB", provider_id="v1", title="Iron Tide", banner_urls=["wide-big"])
+
+    assert service.auto_download_cover(db, entry.id, details=details) is True
+    db.refresh(entry)
+    assert entry.cover_path == f"covers/{entry.id}-card.jpg"
+    with Image.open(BytesIO(saved[entry.cover_path])) as cover:
+        assert cover.size == (720, 1080)
+    db.close()
+
+
 def test_steamgriddb_art_is_added_for_the_same_game_only():
     from datetime import date
     from unittest.mock import MagicMock, patch

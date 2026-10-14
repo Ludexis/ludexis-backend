@@ -30,9 +30,9 @@ def test_landscape_art_is_cropped_to_the_card_around_its_detail():
     # Flat on the left, detailed on the right: the crop lands on the detail.
     image = Image.new("RGB", (480, 270), (40, 40, 40))
     image.paste(noise(180, 270), (300, 0))
-    width, height = size_of(fit_cover(encode(image, "JPEG")))
+    width, height = size_of(fit_cover(encode(image, "JPEG"))[0])
     assert height == 270 and abs(width / height - 2 / 3) < 0.01
-    cropped = Image.open(BytesIO(fit_cover(encode(image))))
+    cropped = Image.open(BytesIO(fit_cover(encode(image))[0]))
     assert cropped.getpixel((cropped.width - 1, 135)) != (40, 40, 40)
 
 
@@ -40,5 +40,25 @@ def test_letterboxed_art_counts_as_landscape_and_loses_its_bars():
     canvas = Image.new("RGB", (264, 352), (20, 20, 30))
     canvas.paste(noise(264, 148), (0, 102))
     assert content_ratio(encode(canvas)) > 1.5
-    width, height = size_of(fit_cover(encode(canvas)))
+    width, height = size_of(fit_cover(encode(canvas))[0])
     assert abs(width / height - 2 / 3) < 0.02 and height < 160
+
+
+def test_avif_landscape_art_is_cropped_to_a_webp_card():
+    contents, extension = fit_cover(encode(noise(480, 270), "AVIF"))
+    width, height = size_of(contents)
+    assert extension == ".webp" and abs(width / height - 2 / 3) < 0.01
+    assert Image.open(BytesIO(contents)).format == "WEBP"
+
+
+def test_an_animated_cover_becomes_its_most_detailed_still():
+    # A blank fade-in frame first, then the picture: the still is the picture, even though the shape fits.
+    blank = Image.new("RGB", (200, 300), (0, 0, 0))
+    output = BytesIO()
+    blank.save(output, format="GIF", save_all=True, append_images=[noise(200, 300)], duration=100, loop=0)
+    contents, extension = fit_cover(output.getvalue())
+
+    still = Image.open(BytesIO(contents))
+    assert extension == ".webp" and not getattr(still, "is_animated", False)
+    assert still.size == (200, 300)
+    assert still.convert("L").getextrema() != (0, 0)
