@@ -19,11 +19,6 @@ import requests
 from app import __version__
 from app.core.logging import get_logger, setup_logging
 from app.edge.drives import STATE_DIR, EdgePathError, library_root, visible_drives
-from app.providers.igdb import IGDBProvider
-from app.providers.plugins import load_plugin_providers
-from app.providers.steam import SteamProvider
-from app.providers.vndb import VNDBProvider
-from app.services.metadata import PARTIAL_THRESHOLD, MetadataService
 from app.services.scanner import SUPPORTED_FOLDER_TYPE, ScannerService
 
 logger = get_logger("app.edge")
@@ -93,9 +88,6 @@ class EdgeAgent:
                     self.running = job["id"]
                     # Check-ins go on while a long scan hashes, so the server keeps seeing the device.
                     threading.Thread(target=self._run_job, args=(job, libraries[job["library_id"]]), daemon=True).start()
-                elif answer.get("metadata"):
-                    self.running = "metadata"
-                    threading.Thread(target=self._match, args=(answer["metadata"], answer["provider_order"]), daemon=True).start()
             time.sleep(answer["poll_seconds"])
 
     def _run_job(self, job: dict, library: dict) -> None:
@@ -112,34 +104,6 @@ class EdgeAgent:
                 pass
         finally:
             self.running = None
-
-    def _match(self, entries: list[dict], provider_order: list[str]) -> None:
-        """Looks the entries up from this machine, which a source may serve when it refuses the server."""
-        try:
-            service = MetadataService(providers=self._providers(), provider_order=provider_order)
-            for entry in entries:
-                result, score = service.auto_match(entry["title"])
-                details = None
-                if result is not None and score >= PARTIAL_THRESHOLD:
-                    details = service.get_merged_details(entry["title"], result.provider, result.provider_id)
-                self._call("POST", "/metadata", json={
-                    "entry_id": entry["entry_id"],
-                    "provider": result.provider if result else None,
-                    "provider_id": result.provider_id if result else None,
-                    "score": score,
-                    "details": details.model_dump(mode="json") if details else None,
-                })
-        except Exception:
-            logger.exception("Metadata lookup failed")
-        finally:
-            self.running = None
-
-    def _providers(self) -> list:
-        # IGDB keeps its keys on the server; here it is used only when this device's .env has them.
-        providers = [VNDBProvider(), SteamProvider(), *load_plugin_providers()]
-        if os.environ.get("TWITCH_CLIENT_ID") and os.environ.get("TWITCH_CLIENT_SECRET"):
-            providers.append(IGDBProvider())
-        return providers
 
     def _progress(self, job_id: str, done: int, total: int, details: str) -> None:
         if self._call("POST", f"/jobs/{job_id}/progress", json={"done": done, "total": total, "details": details})["cancelled"]:

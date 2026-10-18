@@ -17,9 +17,6 @@ def _queue_enrichment(db: Session, scan_job_id: str, stats: dict) -> dict:
     from app.services.job import JobService
 
     scan_job = JobHistoryRepository().get(db, scan_job_id)
-    if scan_job is not None and scan_job.edge is not None and scan_job.edge.match_metadata:
-        # That device looks the new entries up itself at its next check-ins.
-        return stats
     enrichment_job = JobService().start_job(
         db,
         scan_job.user if scan_job else None,

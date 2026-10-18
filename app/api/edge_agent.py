@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 from app.core.edge_auth import get_current_edge
 from app.db.session import get_db
 from app.models.edge_device import EdgeDevice
-from app.schemas.edge import EdgeMetadataResult, EdgeFailure, EdgeLibrary, EdgeLibraryState, EdgePoll, EdgePollResponse, EdgeProgress, EdgeProgressResponse
+from app.schemas.edge import EdgeFailure, EdgeLibrary, EdgeLibraryState, EdgePoll, EdgePollResponse, EdgeProgress, EdgeProgressResponse
 from app.schemas.job_history import JobHistoryRead
 from app.services.edge import EdgeService
 
@@ -55,17 +55,6 @@ def job_failed(job_id: str, data: EdgeFailure, edge: EdgeDevice = Depends(get_cu
     job = _job(db, edge, job_id)
     service.fail(db, job, data.error)
     return job
-
-
-@router.post(
-    "/metadata",
-    status_code=status.HTTP_204_NO_CONTENT,
-    summary="Edge metadata match",
-    description="A match the device looked up for one of its entries; stored as the server's own matching would.",
-)
-def metadata_result(data: EdgeMetadataResult, edge: EdgeDevice = Depends(get_current_edge), db: Session = Depends(get_db)):
-    if service.apply_metadata(db, edge, data) is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Entry not found")
 
 
 @router.post(

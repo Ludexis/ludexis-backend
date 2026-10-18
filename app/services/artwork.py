@@ -440,10 +440,7 @@ class ArtworkService:
         )
         return True
 
-    def fill_missing_artwork(
-        self, db: Session, entry: ArchiveEntry, repair: list[str] | tuple[str, ...] = (), clear_unoffered: bool = False,
-        details: MetadataDetails | None = None,
-    ) -> int:
+    def fill_missing_artwork(self, db: Session, entry: ArchiveEntry, repair: list[str] | tuple[str, ...] = (), clear_unoffered: bool = False) -> int:
         # Provider details are fetched once and shared by every asset type that needs downloading.
         wanted = [
             kind for kind in ("cover", "banner", "logo")
@@ -453,10 +450,7 @@ class ArtworkService:
             wanted.append("screenshots")
         if not wanted:
             return 0
-        # Details looked up elsewhere (an edge device) are used as they are instead of asking the provider again.
-        if details is not None:
-            self._add_steamgriddb_art(db, details)
-        details = details or self._entry_details(entry)
+        details = self._entry_details(entry)
         if details is None:
             return 0
         downloaders = {

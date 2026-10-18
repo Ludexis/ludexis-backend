@@ -14,7 +14,6 @@ services:
       CONFIG_DIR: /tmp/ludexis-config
     volumes:
       - ./state:/state
-      - ./providers:/providers:ro
       - /run/udev:/run/udev:ro
       # Read-only views of where drives are mounted; rslave makes drives mounted later appear inside.
       - type: bind

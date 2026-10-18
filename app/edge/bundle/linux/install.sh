@@ -9,7 +9,7 @@ docker compose version >/dev/null 2>&1 || { echo "The Docker Compose plugin is n
 DIR=/opt/ludexis-edge
 HERE=$(cd "$(dirname "$0")" && pwd)
 
-mkdir -p "$DIR/state" "$DIR/providers" /usr/local/lib/ludexis-edge /mnt/ludexis
+mkdir -p "$DIR/state" /usr/local/lib/ludexis-edge /mnt/ludexis
 if [ "$HERE" != "$DIR" ]; then
   cp "$HERE/docker-compose.yml" "$HERE/.env" "$DIR/"
 fi

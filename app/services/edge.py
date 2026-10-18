@@ -17,13 +17,9 @@ from app.models.archive_entry import ArchiveEntry
 from app.models.job_history import JobHistory
 from app.models.library import Library
 from app.repositories.archive_entry import ArchiveEntryRepository
-from app.services.artwork import ArtworkService
-from app.services.grouping import GroupingService
 from app.services.job import JobService
-from app.services.metadata import MATCHED_THRESHOLD, PARTIAL_THRESHOLD, MetadataService
 from app.services.scanner import ScannerService
-from app.services.settings import SettingsService
-from app.utils.enums import JobStatus, JobType, LibraryStatus, MetadataStatus
+from app.utils.enums import JobStatus, JobType, LibraryStatus
 
 logger = get_logger(__name__)
 
@@ -31,8 +27,6 @@ logger = get_logger(__name__)
 REPORTS_DIR = Path(settings.CONFIG_DIR).parent / "edge-reports"
 BUNDLE_DIR = Path(__file__).resolve().parent.parent / "edge" / "bundle"
 ACTIVE = (JobStatus.PENDING, JobStatus.RUNNING)
-# Entries handed to a device per check-in for metadata lookups.
-METADATA_BATCH = 20
 
 
 def _same_release(left: str | None, right: str) -> bool:
@@ -49,7 +43,6 @@ class EdgeService:
             "name": edge.name,
             "status": edge.status,
             "autoscan": edge.autoscan,
-            "match_metadata": edge.match_metadata,
             "last_seen_at": edge.last_seen_at,
             "version": edge.version,
             "update_available": edge.version is not None and not _same_release(edge.version, __version__),
@@ -146,12 +139,9 @@ class EdgeService:
                 self._end(job, JobStatus.CANCELED, "The library no longer belongs to this edge device")
         db.commit()
         return {
-            "metadata": self._metadata_requests(db, edge) if edge.match_metadata else [],
             "poll_seconds": POLL_SECONDS,
             "server_version": __version__,
             "autoscan": edge.autoscan,
-            "match_metadata": edge.match_metadata,
-            "provider_order": SettingsService().match_providers(db),
             "libraries": libraries,
             "jobs": jobs,
         }
@@ -215,49 +205,6 @@ class EdgeService:
         stats = ScannerService().ingest_report(db, library, report, job_id=job_id, on_progress=on_progress)
         path.unlink(missing_ok=True)
         return stats
-
-    def _metadata_requests(self, db: Session, edge: EdgeDevice) -> list[dict]:
-        entries = (
-            db.query(ArchiveEntry)
-            .join(Library, ArchiveEntry.library_id == Library.id)
-            .filter(
-                Library.edge_id == edge.id,
-                ArchiveEntry.deleted_at.is_(None),
-                ArchiveEntry.metadata_override.is_(False),
-                ArchiveEntry.metadata_source_code.is_(None),
-                ArchiveEntry.last_metadata_refresh.is_(None),
-            )
-            .order_by(ArchiveEntry.created_at)
-            .limit(METADATA_BATCH)
-            .all()
-        )
-        return [{"entry_id": entry.id, "title": entry.title} for entry in entries]
-
-    def apply_metadata(self, db: Session, edge: EdgeDevice, result) -> ArchiveEntry | None:
-        """Stores a match the device looked up, with the thresholds and steps of the server's own matching."""
-        entry = (
-            db.query(ArchiveEntry)
-            .join(Library, ArchiveEntry.library_id == Library.id)
-            .filter(ArchiveEntry.id == result.entry_id, Library.edge_id == edge.id, ArchiveEntry.deleted_at.is_(None))
-            .one_or_none()
-        )
-        if entry is None or entry.metadata_override:
-            return entry
-        entry.last_metadata_refresh = datetime.now(UTC)
-        entry.metadata_confidence = round(result.score, 3)
-        if result.details is None or result.score < PARTIAL_THRESHOLD:
-            entry.metadata_status = MetadataStatus.UNMATCHED
-            db.commit()
-            return entry
-        entry.metadata_status = MetadataStatus.MATCHED if result.score >= MATCHED_THRESHOLD else MetadataStatus.PARTIAL
-        entry.metadata_source = result.details.provider
-        entry.metadata_source_code = result.details.provider_id
-        db.commit()
-        metadata = MetadataService()
-        metadata.refresh_archive(db, entry, result.details)
-        ArtworkService(metadata).fill_missing_artwork(db, entry, details=result.details)
-        GroupingService().regroup(db)
-        return entry
 
     def _end(self, job: JobHistory, status: JobStatus, reason: str) -> None:
         job.status = status

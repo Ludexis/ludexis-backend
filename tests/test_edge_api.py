@@ -220,39 +220,3 @@ def test_removing_an_edge_keeps_its_libraries_on_the_server():
     assert stored["edge_id"] is None
     with TestingSessionLocal() as db:
         assert db.get(JobHistory, job_id).status == JobStatus.CANCELED
-
-
-def test_a_device_that_matches_metadata_gets_its_new_entries_and_stores_the_results(monkeypatch):
-    from app.services import edge as edge_module
-
-    monkeypatch.setattr(edge_module.ArtworkService, "fill_missing_artwork", lambda self, db, entry, **kwargs: 0)
-    headers = admin_headers()
-    edge = add_edge(headers)
-    client.patch(f"/api/edge-devices/{edge['id']}", headers=headers, json={"match_metadata": True})
-    library = add_edge_library(headers, edge["id"], f"/media/{uuid.uuid4().hex}")
-    with TestingSessionLocal() as db:
-        from app.models.archive_entry import ArchiveEntry
-        from app.utils.enums import MetadataStatus, VerificationStatus
-
-        for title in ("Edge Matched", "Edge Unknown"):
-            db.add(ArchiveEntry(title=title, file_path=f"/m/{uuid.uuid4().hex}.zip", library_id=library["id"],
-                                metadata_status=MetadataStatus.UNMATCHED, verification_status=VerificationStatus.UNKNOWN))
-        db.commit()
-
-    requests = {item["title"]: item["entry_id"] for item in poll(edge["token"])["metadata"]}
-    assert set(requests) == {"Edge Matched", "Edge Unknown"}
-
-    details = {"provider": "VNDB", "provider_id": "v1", "title": "Edge Matched", "genres": ["Adventure"], "restricted": True}
-    send = lambda body: client.post("/api/edge/agent/metadata", headers=edge_headers(edge["token"]), json=body)
-    assert send({"entry_id": requests["Edge Matched"], "provider": "VNDB", "provider_id": "v1", "score": 0.95, "details": details}).status_code == 204
-    assert send({"entry_id": requests["Edge Unknown"], "score": 0.4}).status_code == 204
-
-    with TestingSessionLocal() as db:
-        matched, unknown = (db.get(ArchiveEntry, requests[title]) for title in ("Edge Matched", "Edge Unknown"))
-        assert (matched.metadata_status, matched.metadata_source_code, matched.restricted) == (MetadataStatus.MATCHED, "v1", True)
-        assert [genre.name for genre in matched.genres] == ["Adventure"]
-        assert unknown.metadata_status == MetadataStatus.UNMATCHED and unknown.last_metadata_refresh is not None
-    # Both were tried, so they are not handed out again.
-    assert poll(edge["token"])["metadata"] == []
-    other = add_edge(headers)
-    assert client.post("/api/edge/agent/metadata", headers=edge_headers(other["token"]), json={"entry_id": requests["Edge Unknown"]}).status_code == 404

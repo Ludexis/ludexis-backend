@@ -10,7 +10,7 @@ if (-not (Get-Command docker -ErrorAction SilentlyContinue)) {
     throw "Docker Desktop is not installed (https://docs.docker.com/desktop/setup/install/windows-install/)."
 }
 
-New-Item -ItemType Directory -Force $Dir, $Bin, (Join-Path $Dir "state"), (Join-Path $Dir "providers") | Out-Null
+New-Item -ItemType Directory -Force $Dir, $Bin, (Join-Path $Dir "state") | Out-Null
 Copy-Item (Join-Path $Here "docker-compose.yml"), (Join-Path $Here ".env"), (Join-Path $Here "ludexis-edge.ps1") $Dir -Force
 Copy-Item (Join-Path $Here "ludexis-edge.cmd") $Bin -Force
 Get-ChildItem $Dir, $Bin -File | Unblock-File

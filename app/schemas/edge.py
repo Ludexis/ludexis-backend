@@ -3,7 +3,6 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
-from app.schemas.metadata import MetadataDetails
 from app.utils.enums import JobStatus, JobType
 
 EdgeOS = Literal["linux", "windows"]
@@ -27,12 +26,16 @@ class EdgeDeviceCreate(BaseModel):
 class EdgeDeviceUpdate(BaseModel):
     name: str | None = Field(default=None, min_length=1, max_length=128)
     autoscan: bool | None = None
-    match_metadata: bool | None = None
 
 
 class EdgeLibrarySummary(BaseModel):
     id: str
     name: str
+    path: str
+    status: str
+    # Learnt at its first scan; groups the library under its drive.
+    drive_id: str | None = None
+    drive_mount: str | None = None
 
     model_config = {"from_attributes": True}
 
@@ -42,7 +45,6 @@ class EdgeDeviceRead(BaseModel):
     name: str
     status: Literal["PENDING", "ONLINE", "OFFLINE"]
     autoscan: bool
-    match_metadata: bool
     last_seen_at: datetime | None = None
     version: str | None = None
     # The device runs another major.minor release than the server.
@@ -95,29 +97,12 @@ class EdgeJob(BaseModel):
     model_config = {"from_attributes": True}
 
 
-class EdgeMetadataRequest(BaseModel):
-    entry_id: str
-    title: str
-
-
-class EdgeMetadataResult(BaseModel):
-    entry_id: str
-    provider: str | None = None
-    provider_id: str | None = None
-    score: float = 0.0
-    details: MetadataDetails | None = None
-
-
 class EdgePollResponse(BaseModel):
     poll_seconds: int
     server_version: str
     autoscan: bool
-    match_metadata: bool
-    provider_order: list[str]
     libraries: list[EdgeLibrary]
     jobs: list[EdgeJob]
-    # With match_metadata on: entries of this device's libraries never matched yet.
-    metadata: list[EdgeMetadataRequest] = []
 
 
 class EdgeLibraryState(BaseModel):

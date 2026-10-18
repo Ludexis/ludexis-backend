@@ -23,8 +23,6 @@ class EdgeDevice(Base):
     token_hash: str = mapped_column(sa.String(64), nullable=False, unique=True)
     # Scan a library as soon as its drive shows up on the device.
     autoscan: bool = mapped_column(sa.Boolean, nullable=False, default=True, server_default=sa.true())
-    # Look up metadata from the device instead of the server.
-    match_metadata: bool = mapped_column(sa.Boolean, nullable=False, default=False, server_default=sa.false())
     last_seen_at = mapped_column(sa.DateTime(timezone=True), nullable=True)
     version: str = mapped_column(sa.String(32), nullable=True)
     hostname: str = mapped_column(sa.String(256), nullable=True)
