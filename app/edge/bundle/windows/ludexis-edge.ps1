@@ -35,6 +35,14 @@ function Wait-Docker {
     throw "Docker Desktop did not start within two minutes."
 }
 
+# Docker Desktop's VM mounts only the drives that existed when it started; a drive plugged in or unlocked later
+# (USB, VeraCrypt) would be bound as an empty folder. Mount it into the VM now, or remount it if it went stale.
+function Mount-DockerDrive([string]$Letter) {
+    $path = "/mnt/host/$($Letter.ToLower())"
+    wsl.exe -d docker-desktop -u root sh -c "{ mountpoint -q $path && ls $path; } >/dev/null 2>&1 || { umount -l $path 2>/dev/null; mkdir -p $path && mount -t drvfs ${Letter}: $path; } >/dev/null 2>&1"
+    if ($LASTEXITCODE -ne 0) { Write-Warning "Could not make drive ${Letter}: visible to Docker Desktop; restart Docker Desktop with the drive connected." }
+}
+
 # Finds the drive letter of every library of this device (by serial once it was scanned, else by the letter in its
 # path), maps those letters into the container and records their serials for it.
 function Update-Drives {
@@ -77,7 +85,8 @@ function Update-Drives {
     [IO.File]::WriteAllText((Join-Path $Dir "state\drives.json"), ($mapped | ConvertTo-Json -Depth 3), $utf8)
     $lines = @("# Written by ludexis-edge restart from the libraries on the server; do not edit.", "services:", "  edge:", "    volumes:")
     foreach ($letter in $mapped.Keys) {
-        $lines += "      - type: bind", "        source: '${letter}:\'", "        target: /drives/$letter", "        read_only: true"
+        Mount-DockerDrive $letter
+        $lines +="      - type: bind", "        source: '${letter}:\'", "        target: /drives/$letter", "        read_only: true"
     }
     if ($mapped.Count -eq 0) { $lines = $lines[0..2] + "    volumes: []" }
     [IO.File]::WriteAllLines((Join-Path $Dir "docker-compose.override.yml"), [string[]]$lines, $utf8)
@@ -109,8 +118,8 @@ ludexis-edge status   the server connection and, per library, whether its drive 
 ludexis-edge logs     follow its log
 ludexis-edge update   pull the newest image and restart
 
-Docker Desktop only sees drive letters that existed when the container started: after plugging a drive in,
-run "ludexis-edge restart". Mapped network drives are not visible to Docker Desktop.
+After plugging a drive in or unlocking an encrypted volume, run "ludexis-edge restart": it makes the drive
+visible to Docker Desktop and maps it into the container. Mapped network drives are not visible to Docker Desktop.
 "@
     }
 }

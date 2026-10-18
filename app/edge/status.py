@@ -5,6 +5,7 @@ Run inside the edge container by ludexis-edge status and restart.
 
 import os
 import sys
+import time
 
 import requests
 
@@ -16,11 +17,16 @@ def main() -> int:
     server = os.environ.get("LUDEXIS_SERVER_URL", "").rstrip("/")
     token = os.environ.get("LUDEXIS_EDGE_TOKEN", "")
     os_name = os.environ.get("EDGE_OS", "linux")
-    try:
-        response = requests.get(f"{server}/api/edge/agent/libraries", headers={"Authorization": f"Bearer {token}"}, timeout=15)
-    except requests.RequestException as exc:
-        print(f"Server     {server}: not reachable ({exc})")
-        return 1
+    # Right after the container starts its first connection can fail, so try a few times.
+    for attempt in range(3):
+        try:
+            response = requests.get(f"{server}/api/edge/agent/libraries", headers={"Authorization": f"Bearer {token}"}, timeout=15)
+            break
+        except requests.RequestException as exc:
+            if attempt == 2:
+                print(f"Server     {server}: not reachable ({exc})")
+                return 1
+            time.sleep(3)
     if response.status_code == 401:
         print(f"Server     {server}: the token was refused; download a new bundle from Admin > Edge")
         return 1
