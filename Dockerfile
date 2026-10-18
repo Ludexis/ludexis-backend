@@ -9,7 +9,7 @@ ENV PYTHONUNBUFFERED=1
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-COPY backend/ .
+COPY . .
 
 # Runs unprivileged. /data is created here so a new named volume starts out owned by this user;
 # the games folder only needs to be readable.

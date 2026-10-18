@@ -1,0 +1,19 @@
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+.env
+.env.*
+!.env.example
+!.env.docker
+
+# Generated JWT secret, artwork and scheduler state
+config/
+artwork/
+celerybeat-schedule*
+
+.pytest_cache/
+.coverage
+htmlcov/
+*.log

@@ -1,0 +1,3 @@
+# Everything needed to run the test suite; the images install only requirements.txt.
+-r requirements.txt
+pytest==8.4.1

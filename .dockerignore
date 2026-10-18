@@ -1,0 +1,13 @@
+.git
+.github
+**/__pycache__
+**/*.pyc
+.venv
+artwork
+.pytest_cache
+# Local configuration, secrets and runtime files never go into an image.
+**/.env
+**/.env.*
+!**/.env.example
+config
+celerybeat-schedule*
