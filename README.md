@@ -1,11 +1,11 @@
 <p align="center">
-  <img src="https://raw.githubusercontent.com/InvictusRex/Ludexis/main/docs/Ludexis.webp" width="320" alt="Ludexis">
+  <img src="https://raw.githubusercontent.com/Ludexis/Ludexis/main/docs/Ludexis.webp" width="320" alt="Ludexis">
 </p>
 
 <h3 align="center">Ludexis Backend</h3>
 
 <p align="center">
-  The API, scanner and background workers behind <a href="https://github.com/InvictusRex/Ludexis">Ludexis</a>, a self-hosted catalogue for game archives.
+  The API, scanner and background workers behind <a href="https://github.com/Ludexis/Ludexis">Ludexis</a>, a self-hosted catalogue for game archives.
 </p>
 
 <p align="center">
@@ -27,7 +27,7 @@ This repository holds the server side of Ludexis:
 - **Celery workers and a scheduler** for scans, metadata refresh, artwork downloads and scheduled tasks;
 - **Alembic** migrations for the PostgreSQL schema.
 
-The web app lives in [ludexis-frontend](https://github.com/Ludexis/ludexis-frontend). To run the whole stack, use the Docker Compose setup in the [main repository](https://github.com/InvictusRex/Ludexis).
+The web app lives in [ludexis-frontend](https://github.com/Ludexis/ludexis-frontend). To run the whole stack, use the Docker Compose setup in the [main repository](https://github.com/Ludexis/Ludexis).
 
 ## Getting started
 
@@ -36,7 +36,7 @@ The web app lives in [ludexis-frontend](https://github.com/Ludexis/ludexis-front
 The quickest way to get the database and Redis is the development compose file in the main repository:
 
 ```bash
-git clone --recurse-submodules https://github.com/InvictusRex/Ludexis.git
+git clone --recurse-submodules https://github.com/Ludexis/Ludexis.git
 cd Ludexis
 docker compose -f docker-compose.dev.yml up -d   # PostgreSQL on 5432, Redis on 6379 (localhost only)
 cd backend
@@ -146,6 +146,10 @@ docker compose exec backend python -m scripts.reset_password <username>
 ## Contributing
 
 Bug reports, ideas and pull requests are welcome. Read the [contributing guide](https://github.com/Ludexis/.github/blob/main/CONTRIBUTING.md) first. In short: branch from `main`, keep each change focused, add or update tests, and make sure `pytest` passes.
+
+## Maintainer
+
+**Rupankar Majumdar ([@InvictusRex](https://github.com/InvictusRex))**
 
 ## License
 
