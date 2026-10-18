@@ -31,7 +31,7 @@ async def lifespan(_: FastAPI):
 app = FastAPI(
     lifespan=lifespan,
     title="Ludexis Backend",
-    version="0.1.0",
+    version="1.1.0",
     description="Self-hosted game archive metadata catalog backend built with FastAPI.",
 )
 
