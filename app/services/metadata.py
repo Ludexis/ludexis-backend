@@ -349,14 +349,23 @@ class MetadataService:
         if provider_name:
             provider = self._get_provider(provider_name)
             if provider:
-                return provider.get_details(provider_id)
+                return self._provider_details(provider, provider_id)
             return None
 
         for provider in self.providers:
-            details = provider.get_details(provider_id)
+            details = self._provider_details(provider, provider_id)
             if details:
                 return details
         return None
+
+    def _provider_details(self, provider: MetadataProvider, provider_id: str) -> MetadataDetails | None:
+        # A source that is down or refuses the request counts as having no record, like a failed search,
+        # so it cannot fail the artwork picker, an identify or a whole refresh job.
+        try:
+            return provider.get_details(provider_id)
+        except Exception:
+            logger.exception("Metadata provider details failed", extra={"provider": provider.name, "provider_id": provider_id})
+            return None
 
     def _get_provider(self, name: str) -> MetadataProvider | None:
         return self.provider_map.get(name)
@@ -515,11 +524,7 @@ class MetadataService:
         )
         if candidate is None:
             return None
-        try:
-            details = provider.get_details(candidate.provider_id)
-        except Exception:
-            logger.exception("Metadata supplement failed", extra={"provider": provider.name, "provider_id": candidate.provider_id})
-            return None
+        details = self._provider_details(provider, candidate.provider_id)
         if details is None:
             return None
         # Same name, different year: a remake or an unrelated game.

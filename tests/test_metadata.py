@@ -88,6 +88,20 @@ def test_get_details():
     assert details is not None
     assert details.title == "Portal 2"
 
+class RefusingProvider(FakeProvider):
+    name = "Refusing"
+
+    def get_details(self, external_id):
+        raise ConnectionError("403 Forbidden")
+
+
+def test_a_failing_source_counts_as_no_record():
+    service = MetadataService(providers=[RefusingProvider()])
+
+    assert service.get_details("Refusing", "1") is None
+    assert service.get_merged_details("Portal 2", "Refusing", "1") is None
+
+
 def test_get_details_unknown_provider():
     service = MetadataService(
         providers=[FakeProvider()]
