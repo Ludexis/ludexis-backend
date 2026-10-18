@@ -1,0 +1,34 @@
+#!/bin/sh
+# Entry point for every Ludexis backend container: ludexis server | worker | beat | edge | health <role>.
+set -e
+
+case "$1" in
+  server)
+    alembic upgrade head
+    exec uvicorn main:app --host 0.0.0.0 --port 8000 --proxy-headers --forwarded-allow-ips='*'
+    ;;
+  worker)
+    exec celery -A app.tasks.celery_app worker --loglevel=info
+    ;;
+  beat)
+    # Beat starts due scheduled tasks every five minutes; schedules are edited in Admin > Scheduled Tasks.
+    exec celery -A app.tasks.celery_app beat --loglevel=info --schedule /tmp/celerybeat-schedule
+    ;;
+  edge)
+    exec python -m app.edge
+    ;;
+  health)
+    case "$2" in
+      server) exec python -c "import urllib.request; urllib.request.urlopen('http://localhost:8000/healthz').read()" ;;
+      worker) exec celery -A app.tasks.celery_app inspect ping -d "celery@$HOSTNAME" --timeout 10 ;;
+      # Beat saves its schedule file every few minutes while it runs.
+      beat) find /tmp -maxdepth 1 -name 'celerybeat-schedule*' -mmin -10 | grep -q . ;;
+      # The edge touches this file after every successful poll of the server.
+      edge) find /tmp -maxdepth 1 -name 'ludexis-edge-alive' -mmin -2 | grep -q . ;;
+      *) echo "usage: ludexis health server|worker|beat|edge" >&2; exit 2 ;;
+    esac
+    ;;
+  *)
+    exec "$@"
+    ;;
+esac

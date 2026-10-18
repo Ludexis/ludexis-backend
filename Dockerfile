@@ -10,6 +10,7 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 COPY . .
+RUN chmod +x bin/ludexis && ln -s /usr/src/app/bin/ludexis /usr/local/bin/ludexis
 
 # Runs unprivileged. /data is created here so a new named volume starts out owned by this user;
 # the games folder only needs to be readable.
@@ -18,4 +19,4 @@ USER ludexis
 
 EXPOSE 8000
 
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["ludexis", "server"]

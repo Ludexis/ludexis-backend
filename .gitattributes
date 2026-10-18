@@ -1,0 +1,4 @@
+bin/* text eol=lf
+*.sh text eol=lf
+app/edge/bundle/linux/* text eol=lf
+app/edge/bundle/windows/* text eol=crlf

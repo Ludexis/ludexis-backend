@@ -4,6 +4,7 @@ import secrets
 import time
 from pathlib import Path
 from typing import List
+from urllib.parse import quote
 
 from pydantic import PostgresDsn, RedisDsn, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -28,10 +29,17 @@ class Settings(BaseSettings):
     IGDB_TOKEN_URL: str = "https://id.twitch.tv/oauth2/token"
     IGDB_API_URL: str = "https://api.igdb.com/v4"
 
-    DATABASE_URL: PostgresDsn
-    REDIS_URL: RedisDsn
-    CELERY_BROKER_URL: RedisDsn
-    CELERY_RESULT_BACKEND: RedisDsn
+    # Left unset, the URL is built from the POSTGRES_* values the database container reads from the same .env.
+    DATABASE_URL: PostgresDsn | None = None
+    POSTGRES_USER: str = "ludexis"
+    POSTGRES_PASSWORD: str = "ludexis"
+    POSTGRES_DB: str = "ludexis"
+    POSTGRES_HOST: str = "db"
+    POSTGRES_PORT: int = 5432
+    REDIS_URL: RedisDsn = "redis://redis:6379/0"
+    # Left unset, Celery uses REDIS_URL for both.
+    CELERY_BROKER_URL: RedisDsn | None = None
+    CELERY_RESULT_BACKEND: RedisDsn | None = None
     ARTWORK_STORAGE_PATH: str = "./artwork"
     MAX_ARTWORK_SIZE_MB: int = 10
     ALLOWED_ARTWORK_MIME_TYPES: list[str] = [
@@ -57,6 +65,17 @@ class Settings(BaseSettings):
     DEFAULT_ADMIN_USERNAME: str = "admin"
     DEFAULT_ADMIN_PASSWORD: str = "admin"
     DEFAULT_ADMIN_EMAIL: str = "admin@example.com"
+
+    @model_validator(mode="after")
+    def _connection_urls(self) -> "Settings":
+        if self.DATABASE_URL is None:
+            self.DATABASE_URL = PostgresDsn(
+                f"postgresql+psycopg://{quote(self.POSTGRES_USER, safe='')}:{quote(self.POSTGRES_PASSWORD, safe='')}"
+                f"@{self.POSTGRES_HOST}:{self.POSTGRES_PORT}/{self.POSTGRES_DB}"
+            )
+        self.CELERY_BROKER_URL = self.CELERY_BROKER_URL or self.REDIS_URL
+        self.CELERY_RESULT_BACKEND = self.CELERY_RESULT_BACKEND or self.REDIS_URL
+        return self
 
     @model_validator(mode="after")
     def _jwt_secret(self) -> "Settings":
