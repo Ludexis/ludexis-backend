@@ -41,7 +41,8 @@ function Update-Drives {
     $server = (Get-EnvValue "LUDEXIS_SERVER_URL").TrimEnd("/")
     $token = Get-EnvValue "LUDEXIS_EDGE_TOKEN"
     try {
-        $libraries = @(Invoke-RestMethod -Uri "$server/api/edge/agent/libraries" -Headers @{ Authorization = "Bearer $token" } -TimeoutSec 15)
+        # Windows PowerShell returns a JSON array as one object; ForEach-Object unrolls it into its items.
+        $libraries = @(Invoke-RestMethod -Uri "$server/api/edge/agent/libraries" -Headers @{ Authorization = "Bearer $token" } -TimeoutSec 15 | ForEach-Object { $_ })
     } catch {
         $code = $_.Exception.Response.StatusCode.value__
         if ($code -eq 401) { throw "The server refused this device's token; download a new bundle from Admin > Edge." }
