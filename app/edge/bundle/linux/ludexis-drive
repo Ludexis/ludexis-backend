@@ -1,0 +1,26 @@
+#!/bin/sh
+# Called through ludexis-drive@<UUID>.service whenever a filesystem appears. Mounts it read-only below
+# /mnt/ludexis unless the desktop already did, then starts the edge device, which scans it if autoscan is on.
+set -u
+
+DIR=/opt/ludexis-edge
+key() { printf '%s' "$1" | tr -d '-' | tr 'A-Z' 'a-z' | tail -c 8; }
+
+# Only drives that hold a library; the edge device keeps this list up to date. Linux and Windows name an NTFS
+# drive differently but agree on its last 8 hex digits.
+wanted=$(key "$1")
+found=
+while read -r drive; do
+  [ -n "$drive" ] && [ "$(key "$drive")" = "$wanted" ] && found=1
+done 2>/dev/null < "$DIR/state/drives"
+[ -n "$found" ] || exit 0
+
+for _ in 1 2 3 4 5 6 7 8 9 10; do
+  findmnt -rn -S "UUID=$1" >/dev/null && break
+  sleep 1
+done
+if ! findmnt -rn -S "UUID=$1" >/dev/null; then
+  # Tied to the device: unplugging the drive unmounts it.
+  systemd-mount --no-block --collect --options=ro "UUID=$1" "/mnt/ludexis/$1"
+fi
+exec /usr/local/bin/ludexis-edge start

@@ -1,0 +1,7 @@
+[Unit]
+Description=Ludexis edge device: mount drive %I when a library is on it
+After=docker.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/lib/ludexis-edge/ludexis-drive %I

@@ -1,0 +1,61 @@
+#!/bin/sh
+# Ludexis edge device: ludexis-edge start | stop | restart | status | logs | update
+set -eu
+
+DIR=/opt/ludexis-edge
+cd "$DIR"
+
+compose() { docker compose --project-name ludexis-edge "$@"; }
+env_value() { sed -n "s/^$1=//p" .env | tail -n 1; }
+
+usage() {
+  cat <<'USAGE'
+ludexis-edge start    start the edge device (does nothing if it already runs)
+ludexis-edge restart  check Docker, the server and the drives, re-map extra folders, recreate the container
+ludexis-edge stop     stop it; waiting scans run when it starts again
+ludexis-edge status   the server connection and, per library, whether its drive is here
+ludexis-edge logs     follow its log
+ludexis-edge update   pull the newest image and restart
+USAGE
+}
+
+need_docker() {
+  docker info >/dev/null 2>&1 || { echo "Docker is not running: sudo systemctl start docker" >&2; exit 1; }
+}
+
+# Library folders outside /media, /mnt and /run/media are mapped from EDGE_ROOTS in .env.
+write_override() {
+  roots=$(env_value EDGE_ROOTS)
+  if [ -z "$roots" ]; then
+    rm -f docker-compose.override.yml
+    return
+  fi
+  {
+    echo "# Written by ludexis-edge from EDGE_ROOTS in .env; edit .env instead."
+    echo "services:"
+    echo "  edge:"
+    echo "    volumes:"
+    for root in $(printf '%s' "$roots" | tr ':' ' '); do
+      printf '      - type: bind\n        source: %s\n        target: %s\n        read_only: true\n        bind:\n          propagation: rslave\n' "$root" "$root"
+    done
+  } > docker-compose.override.yml
+}
+
+status() {
+  compose ps
+  for _ in 1 2 3 4 5 6 7 8 9 10; do
+    compose exec -T edge true >/dev/null 2>&1 && break
+    sleep 1
+  done
+  compose exec -T edge python -m app.edge.status
+}
+
+case "${1:-help}" in
+  start) need_docker; write_override; compose up -d ;;
+  restart) need_docker; write_override; compose up -d --force-recreate; status ;;
+  stop) compose stop ;;
+  status) need_docker; status ;;
+  logs) compose logs -f --tail 100 ;;
+  update) need_docker; compose pull; write_override; compose up -d --force-recreate; status ;;
+  *) usage ;;
+esac

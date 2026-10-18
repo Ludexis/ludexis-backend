@@ -1,0 +1,22 @@
+# Ludexis edge device: scans the drives attached to this PC for the Ludexis server.
+# Use "ludexis-edge start | restart | stop | status | logs | update". The drive letters are mapped in
+# docker-compose.override.yml, which "ludexis-edge restart" rewrites; do not edit it by hand.
+
+services:
+  edge:
+    image: ghcr.io/ludexis/ludexis-backend:${LUDEXIS_VERSION:-latest}
+    command: ludexis edge
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      EDGE_OS: windows
+      # Holds a signing secret the edge never uses; the server keeps the real one.
+      CONFIG_DIR: /tmp/ludexis-config
+    volumes:
+      - ./state:/state
+      - ./providers:/providers:ro
+    healthcheck:
+      test: ["CMD", "ludexis", "health", "edge"]
+      interval: 30s
+      timeout: 5s
+      retries: 3

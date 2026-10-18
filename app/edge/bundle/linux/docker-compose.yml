@@ -1,0 +1,43 @@
+# Ludexis edge device: scans the drives attached to this machine for the Ludexis server.
+# Started by "ludexis-edge start" or when a known drive is plugged in. Drive mounts it does not
+# know yet are added by "ludexis-edge restart" in docker-compose.override.yml.
+
+services:
+  edge:
+    image: ghcr.io/ludexis/ludexis-backend:${LUDEXIS_VERSION:-latest}
+    command: ludexis edge
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      EDGE_OS: linux
+      # Holds a signing secret the edge never uses; the server keeps the real one.
+      CONFIG_DIR: /tmp/ludexis-config
+    volumes:
+      - ./state:/state
+      - ./providers:/providers:ro
+      - /run/udev:/run/udev:ro
+      # Read-only views of where drives are mounted; rslave makes drives mounted later appear inside.
+      - type: bind
+        source: /media
+        target: /media
+        read_only: true
+        bind:
+          propagation: rslave
+      - type: bind
+        source: /mnt
+        target: /mnt
+        read_only: true
+        bind:
+          propagation: rslave
+      - type: bind
+        source: /run/media
+        target: /run/media
+        read_only: true
+        bind:
+          propagation: rslave
+          create_host_path: true
+    healthcheck:
+      test: ["CMD", "ludexis", "health", "edge"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
