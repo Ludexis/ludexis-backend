@@ -89,21 +89,43 @@ def test_a_report_never_judges_entries_of_other_libraries():
         assert entries(db, first)[0].file_path == "/a/Copy.zip"
 
 
-def test_a_library_that_comes_back_is_verified_against_the_reported_hashes():
+def test_a_library_that_comes_back_keeps_its_hashes_and_counts_new_files_as_pending():
     with TestingSessionLocal() as db:
         library = edge_library(db)
-        good, bad = item("/m/G", "Good.zip", "d" * 64), item("/m/G", "Bad.zip", "e" * 64)
-        ingest(db, library, [good, bad])
+        same, resized, gone = item("/m/G", "Same.zip", "d" * 64), item("/m/G", "Resized.zip", "e" * 64), item("/m/G", "Gone.zip")
+        ingest(db, library, [same, resized, gone])
         library.status = LibraryStatus.OFFLINE.value
         db.commit()
 
-        stats = ingest(db, library, [good, {**bad, "file_hash": "f" * 64}])
+        # An automatic scan: nothing hashed, a new and a resized file only counted.
+        unhashed = {**same, "file_hash": None, "modified_time": "2026-10-05T00:00:00+00:00"}
+        stats = ingest(db, library, [unhashed], pending=["Resized.zip", "New.zip"])
 
         assert stats["reconnected_libraries"] == [library.name]
-        # Same size and time but other content: the archive was damaged while the drive was away.
-        assert stats["reconnect_verified"] == 1
-        assert stats["reconnect_corrupted"] == 1
+        assert stats["created"] == 0
+        assert stats["missing"] == 1
         assert library.status == LibraryStatus.ONLINE.value
+        assert library.pending_changes == 2
+        by_name = {entry.relative_path: entry for entry in entries(db, library)}
+        assert by_name["Same.zip"].file_hash == "d" * 64
+        assert by_name["Resized.zip"].verification_status != VerificationStatus.MISSING
+        assert by_name["Gone.zip"].verification_status == VerificationStatus.MISSING
+
+        # The scan the user then starts stores them and clears the count.
+        stats = ingest(db, library, [unhashed, {**resized, "file_size": 20}, item("/m/G", "New.zip")])
+        assert stats["created"] == 1
+        assert library.pending_changes == 0
+
+
+def test_a_listing_of_only_pending_files_does_not_take_the_library_offline():
+    with TestingSessionLocal() as db:
+        library = edge_library(db)
+        ingest(db, library, [item("/m/G", "Alpha.zip")])
+
+        ingest(db, library, [], pending=["Alpha.zip"])
+
+        assert library.status == LibraryStatus.ONLINE.value
+        assert entries(db, library)[0].verification_status != VerificationStatus.MISSING
 
 
 def test_the_server_scan_leaves_edge_libraries_alone():

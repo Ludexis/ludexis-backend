@@ -79,3 +79,35 @@ def test_the_bundle_needs_the_current_token_and_carries_it():
         assert {"ludexis-edge/.env", "ludexis-edge/docker-compose.yml", f"ludexis-edge/{installer}"} <= names
         assert f"LUDEXIS_EDGE_TOKEN={edge['token']}" in archive.read("ludexis-edge/.env").decode()
     assert archive.getinfo("ludexis-edge/install.ps1").external_attr >> 16 == 0o644
+
+
+def _scan(tmp_path, monkeypatch, known, store_new):
+    from app.edge import agent as agent_module
+
+    for name, data in {"Same.zip": b"a" * 10, "Resized.zip": b"b" * 20, "New.zip": b"c" * 5}.items():
+        (tmp_path / name).write_bytes(data)
+    edge = agent_module.EdgeAgent("http://server", "ldx_test", "linux")
+    sent = {}
+    monkeypatch.setattr(agent_module, "library_root", lambda os_name, library, found: (tmp_path, None, None))
+    monkeypatch.setattr(edge, "_progress", lambda *args: None)
+    monkeypatch.setattr(edge, "_call", lambda method, path, **kwargs: {"entries": known})
+    monkeypatch.setattr(edge, "_send", lambda job_id, report: sent.update(report))
+    hashed = []
+    monkeypatch.setattr(edge.scanner, "_compute_file_hash", lambda path, on_chunk=None: hashed.append(path.name) or "h" * 64)
+    edge.scan("job", {"id": "lib", "name": "Games", "path": str(tmp_path)}, store_new=store_new)
+    return sent, hashed
+
+
+def test_an_automatic_edge_scan_hashes_nothing_and_reports_new_or_resized_files_as_pending(tmp_path, monkeypatch):
+    known = {"Same.zip": [10, "2020-01-01T00:00:00+00:00", True], "Resized.zip": [10, "2020-01-01T00:00:00+00:00", True]}
+
+    sent, hashed = _scan(tmp_path, monkeypatch, known, store_new=False)
+
+    assert hashed == []
+    assert [item["relative_path"] for item in sent["items"]] == ["Same.zip"]
+    assert sorted(sent["pending"]) == ["New.zip", "Resized.zip"]
+
+    sent, hashed = _scan(tmp_path, monkeypatch, known, store_new=True)
+    # A scan someone started hashes the new, resized and re-dated files, never sends pending.
+    assert sorted(hashed) == ["New.zip", "Resized.zip", "Same.zip"]
+    assert "pending" not in sent

@@ -165,7 +165,7 @@ class EdgeService:
             for entry in ArchiveEntryRepository().list_in_library(db, library.id)
             if entry.relative_path
         }
-        return {"entries": entries, "verify": library.status == LibraryStatus.OFFLINE}
+        return {"entries": entries}
 
     def job(self, db: Session, edge: EdgeDevice, job_id: str) -> JobHistory | None:
         return db.query(JobHistory).filter(JobHistory.id == job_id, JobHistory.edge_id == edge.id).one_or_none()

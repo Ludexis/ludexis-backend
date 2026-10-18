@@ -55,6 +55,7 @@ class LibraryRead(LibraryBase, TimestampedModel):
     edge_status: str | None = None
     drive_id: str | None = None
     drive_mount: str | None = None
+    pending_changes: int = 0
 
     model_config = {
         "from_attributes": True,

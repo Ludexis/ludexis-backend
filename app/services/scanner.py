@@ -266,7 +266,7 @@ class ScannerService:
         ]
         was_offline = library.status == LibraryStatus.OFFLINE
         error = report.get("error")
-        if not error and not items and self.repo.count_in_library(db, library.id):
+        if not error and not items and not report.get("pending") and self.repo.count_in_library(db, library.id):
             # Same rule as check_library: an unplugged drive can look like an empty folder.
             error = "Library folder is empty but has indexed entries"
         drive = report.get("drive") or {}
@@ -283,36 +283,31 @@ class ScannerService:
             logger.warning("Edge library offline", extra={"library": library.name, "reason": error})
             return {"created": 0, "updated": 0, "moved": 0, "errors": 0, "cancelled": False, "created_ids": [], "offline_libraries": [library.name], "library": library.name}
 
-        listed = {item.file_path: item for item in items}
+        # An automatic scan lists new or resized files (relative paths) under "pending" without hashing them: they are
+        # left for a scan the user starts, and still count as present so their entries are not marked missing meanwhile.
+        pending = set(report.get("pending") or [])
+        listed = {item.file_path for item in items}
 
         def exists(entry: ArchiveEntry) -> bool:
             if entry.library_id == library.id:
-                return entry.file_path in listed
+                return entry.file_path in listed or entry.relative_path in pending
             other = entry.library
             return Path(entry.file_path).exists() if other is not None and other.edge_id is None else True
 
-        def verify(db: Session, library_id: str) -> dict[str, int]:
-            # The device hashed every file of a library that came back, so the hashes are compared here.
-            stats = {"verified": 0, "missing": 0, "corrupted": 0}
-            for entry in self.repo.list_in_library(db, library_id):
-                item = listed.get(entry.file_path)
-                if item is None:
-                    status = VerificationStatus.MISSING
-                elif item.file_hash is None and entry.archive_type != SUPPORTED_FOLDER_TYPE:
-                    continue
-                elif item.file_hash != entry.file_hash:
-                    status = VerificationStatus.CORRUPTED
-                else:
-                    status = VerificationStatus.VERIFIED
-                entry.verification_status = status
-                entry.last_verified = datetime.now(timezone.utc)
-                stats[status.value.lower()] += 1
-            db.commit()
-            return stats
+        # The device hashes only new or changed files; a file of unchanged size keeps the hash already stored.
+        known = {entry.relative_path: entry for entry in self.repo.list_in_library(db, library.id) if entry.relative_path}
+        for item in items:
+            entry = known.get(item.relative_path)
+            if item.file_hash is None and entry is not None and entry.file_size == item.file_size:
+                item.file_hash = entry.file_hash
 
         self.exists = exists
         self.hash_files = False
-        stats = self._ingest_batches(db, [(library, items, was_offline)], job_id, on_progress, verify)
+        # A drive that comes back is not hashed again in full; size changes show up as pending files instead.
+        stats = self._ingest_batches(db, [(library, items, was_offline)], job_id, on_progress, lambda db, library_id: {})
+        library.pending_changes = len(pending)
+        db.commit()
+        stats["pending"] = library.pending_changes
         stats["offline_libraries"] = []
         stats["library"] = library.name
         logger.info("Edge report stored", extra={"job_id": job_id, "library": library.name, "archives_created": stats["created"], "archives_moved": stats["moved"]})

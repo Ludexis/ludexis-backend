@@ -89,6 +89,8 @@ class EdgeJob(BaseModel):
     job_type: JobType
     status: JobStatus
     library_id: str | None = None
+    # Empty for automatic scans (a drive connected, a schedule), which only count new files instead of hashing them.
+    user_id: str | None = None
 
     model_config = {"from_attributes": True}
 
@@ -121,8 +123,6 @@ class EdgePollResponse(BaseModel):
 class EdgeLibraryState(BaseModel):
     # relative_path -> [file_size, modified_time ISO, has_hash]
     entries: dict[str, list]
-    # The library was offline: hash every file so its entries can be verified.
-    verify: bool
 
 
 class EdgeProgress(BaseModel):

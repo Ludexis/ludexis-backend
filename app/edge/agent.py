@@ -100,7 +100,8 @@ class EdgeAgent:
 
     def _run_job(self, job: dict, library: dict) -> None:
         try:
-            self.scan(job["id"], library)
+            # A scan someone started stores new files; an automatic one (no user) only counts them.
+            self.scan(job["id"], library, store_new=job.get("user_id") is not None)
         except Cancelled:
             logger.info("Scan cancelled", extra={"job_id": job["id"]})
         except Exception as exc:
@@ -144,7 +145,7 @@ class EdgeAgent:
         if self._call("POST", f"/jobs/{job_id}/progress", json={"done": done, "total": total, "details": details})["cancelled"]:
             raise Cancelled()
 
-    def scan(self, job_id: str, library: dict) -> None:
+    def scan(self, job_id: str, library: dict, store_new: bool = True) -> None:
         self._progress(job_id, 0, 1, f"Scanning {library['name']} on this device")
         try:
             root, drive, subpath = library_root(self.os_name, library, self.drives)
@@ -159,9 +160,16 @@ class EdgeAgent:
         items = self.scanner._discover_items(root)
         for item in items:
             item.relative_path = self.scanner._relative_path(item.file_path, root)
-        state = self._call("GET", f"/libraries/{library['id']}/state")
-        known = state["entries"]
-        to_hash = [item for item in items if item.archive_type != SUPPORTED_FOLDER_TYPE and (state["verify"] or self._changed(item, known.get(item.relative_path)))]
+        known = self._call("GET", f"/libraries/{library['id']}/state")["entries"]
+        pending = []
+        if store_new:
+            to_hash = [item for item in items if item.archive_type != SUPPORTED_FOLDER_TYPE and self._changed(item, known.get(item.relative_path))]
+        else:
+            # Only sizes are compared: new or resized files are reported as pending and nothing is hashed.
+            unchanged = []
+            for item in items:
+                (pending if self._resized(item, known.get(item.relative_path)) else unchanged).append(item)
+            items, to_hash = unchanged, []
         total = sum(item.file_size or 0 for item in to_hash) or 1
         done, last = 0, 0.0
         for item in to_hash:
@@ -176,6 +184,7 @@ class EdgeAgent:
             "library_id": library["id"],
             "drive": {"id": drive.id, "subpath": subpath, "mount": drive.mount} if drive else None,
             "items": [self._item(item) for item in items],
+            **({} if store_new else {"pending": [item.relative_path for item in pending]}),
         })
 
     def _changed(self, item, known: list | None) -> bool:
@@ -184,6 +193,9 @@ class EdgeAgent:
         size, modified, has_hash = known
         stored = datetime.fromisoformat(modified) if modified else None
         return not has_hash or size != item.file_size or stored != item.modified_time
+
+    def _resized(self, item, known: list | None) -> bool:
+        return known is None or (item.archive_type != SUPPORTED_FOLDER_TYPE and known[0] != item.file_size)
 
     def _item(self, item) -> dict:
         data = dataclasses.asdict(item)

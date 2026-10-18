@@ -50,6 +50,8 @@ class Library(Base):
     drive_id: str = mapped_column(sa.String(64), nullable=True)
     drive_subpath: str = mapped_column(sa.Text, nullable=True)
     drive_mount: str = mapped_column(sa.Text, nullable=True)
+    # New or resized files an automatic edge scan found but did not hash; a scan started by a user stores them.
+    pending_changes: int = mapped_column(sa.Integer, nullable=False, default=0, server_default="0")
 
     created_at = mapped_column(
         sa.DateTime(timezone=True),
