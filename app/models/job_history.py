@@ -22,5 +22,15 @@ class JobHistory(Base):
     started_at = mapped_column(sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False)
     completed_at = mapped_column(sa.DateTime(timezone=True), nullable=True)
     user_id = mapped_column(sa.String(36), sa.ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    # The one library a scan covers; empty for jobs over everything.
+    library_id = mapped_column(sa.String(36), sa.ForeignKey("libraries.id", ondelete="SET NULL"), nullable=True)
+    # Run by this edge device instead of the server's worker.
+    edge_id = mapped_column(sa.String(36), sa.ForeignKey("edge_devices.id", ondelete="SET NULL"), nullable=True, index=True)
 
     user = relationship("User")
+    library = relationship("Library")
+    edge = relationship("EdgeDevice")
+
+    @property
+    def edge_name(self) -> str | None:
+        return self.edge.name if self.edge is not None else None

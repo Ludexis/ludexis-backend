@@ -16,6 +16,10 @@ class JobHistoryBase(BaseModel):
     user_id: str | None = None
     started_at: datetime | None = None
     completed_at: datetime | None = None
+    library_id: str | None = None
+    # Set when an edge device runs the job instead of the server's worker.
+    edge_id: str | None = None
+    edge_name: str | None = None
 
 
 class JobHistoryCreate(BaseModel):

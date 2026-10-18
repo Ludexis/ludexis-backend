@@ -1,4 +1,4 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, fields
 from pathlib import Path
 from typing import Callable
 from datetime import datetime, UTC, timezone
@@ -52,6 +52,10 @@ class ScannerService:
     def __init__(self) -> None:
         self.repo = ArchiveEntryRepository()
         self.library_repo = LibraryRepository()
+        # Whether an indexed entry's file is still there. A report from an edge device answers this from its listing,
+        # since the server cannot see that machine's drives; it also never hashes files itself then.
+        self.exists: Callable[[ArchiveEntry], bool] = lambda entry: Path(entry.file_path).exists()
+        self.hash_files = True
 
     def _compute_file_hash(self, path: Path, on_chunk: Callable[[int], None] | None = None) -> str | None:
         # Folder entries have no single file to hash.
@@ -105,8 +109,8 @@ class ScannerService:
         }
         archives = self.repo.list_in_library(db, library_id) if library_id else self.repo.list_all(db)
         for archive in archives:
-            # An unplugged drive must not turn its entries MISSING.
-            if archive.library is not None and archive.library.status == LibraryStatus.OFFLINE:
+            # An unplugged drive must not turn its entries MISSING; an edge device's drives are not visible here.
+            if archive.library is not None and (archive.library.status == LibraryStatus.OFFLINE or archive.library.edge_id):
                 continue
             status = self._verify_archive(
                 db,
@@ -155,6 +159,9 @@ class ScannerService:
                 # A library picked by hand is scanned even when it is left out of scans of everything.
                 if (library.id != library_id) if library_id else not library.enabled:
                     continue
+                # Edge device libraries are scanned by their device and arrive through ingest_report.
+                if library.edge_id:
+                    continue
                 was_offline = library.status == LibraryStatus.OFFLINE
                 if self.check_library(db, library):
                     targets.append((library, Path(library.path), was_offline))
@@ -177,6 +184,26 @@ class ScannerService:
                 for library, items, reconnected in batches
             ]
 
+        stats = self._ingest_batches(db, batches, job_id, on_progress, self.verify_archives)
+        stats["offline_libraries"] = offline
+        if library_id:
+            stats["library"] = next((library.name for library, _, _ in batches), None) or ", ".join(offline)
+        if stats["cancelled"]:
+            return stats
+        logger.info(
+            f"{label} completed",
+            extra={
+                "job_id": job_id,
+                "archives_created": stats["created"],
+                "archives_updated": stats["updated"],
+                "archives_moved": stats["moved"],
+                "archives_failed": stats["errors"],
+            },
+        )
+        return stats
+
+    def _ingest_batches(self, db: Session, batches: list, job_id: str | None, on_progress: ProgressCallback | None, verify: Callable[[Session, str], dict],) -> dict:
+        """Stores (library, items, reconnected) batches; verify(db, library_id) checks a library that came back."""
         stats = {
             "created": 0,
             "updated": 0,
@@ -186,12 +213,10 @@ class ScannerService:
             "cancelled": False,
             "created_ids": [],
         }
-        stats["offline_libraries"] = offline
         stats["reconnected_libraries"] = [library.name for library, _, reconnected in batches if reconnected]
         stats["missing"] = 0
-        if library_id:
-            stats["library"] = next((library.name for library, _, _ in batches), None) or ", ".join(offline)
-        total = sum(self._progress_weight(item) for _, items, _ in batches for item in items)
+        weigh = self._progress_weight if self.hash_files else (lambda item: 1)
+        total = sum(weigh(item) for _, items, _ in batches for item in items)
         done = 0
         for library, items, _ in batches:
             for item in items:
@@ -204,7 +229,7 @@ class ScannerService:
                         },
                     )
                     return stats
-                weight = self._progress_weight(item)
+                weight = weigh(item)
                 # The last unit is reported once the item is stored, not when its hash is read.
                 on_chunk = (lambda chunks, start=done, weight=weight: on_progress(start + min(chunks, weight - 1), total)) if on_progress else None
                 self._process_item(db, item, library.id if library is not None else None, stats, on_chunk)
@@ -220,19 +245,77 @@ class ScannerService:
         # A drive that was away may have come back with changed files, so its entries are checked right away.
         for library, _, reconnected in batches:
             if reconnected:
-                for outcome, count in self.verify_archives(db, library.id).items():
+                for outcome, count in verify(db, library.id).items():
                     stats[f"reconnect_{outcome}"] = stats.get(f"reconnect_{outcome}", 0) + count
         stats.update(GroupingService().regroup(db))
-        logger.info(
-            f"{label} completed",
-            extra={
-                "job_id": job_id,
-                "archives_created": stats["created"],
-                "archives_updated": stats["updated"],
-                "archives_moved": stats["moved"],
-                "archives_failed": stats["errors"],
-            },
-        )
+        return stats
+
+    def ingest_report(self, db: Session, library: Library, report: dict, job_id: str | None = None, on_progress: ProgressCallback | None = None,) -> dict:
+        """Stores the listing an edge device made of one of its libraries, like a scan of a folder on this server.
+
+        The listing is the whole library, so a path missing from it is gone. Paths outside this library are never
+        judged from it, which at worst indexes a second copy and never loses an entry.
+        """
+        names = {field.name for field in fields(ArchiveScanItem)}
+        items = [
+            ArchiveScanItem(**{
+                **{key: value for key, value in item.items() if key in names},
+                "modified_time": datetime.fromisoformat(item["modified_time"]) if item.get("modified_time") else None,
+            })
+            for item in report.get("items", [])
+        ]
+        was_offline = library.status == LibraryStatus.OFFLINE
+        error = report.get("error")
+        if not error and not items and self.repo.count_in_library(db, library.id):
+            # Same rule as check_library: an unplugged drive can look like an empty folder.
+            error = "Library folder is empty but has indexed entries"
+        drive = report.get("drive") or {}
+        if drive.get("id"):
+            library.drive_id = drive["id"]
+            library.drive_subpath = drive.get("subpath")
+            library.drive_mount = drive.get("mount")
+        library.status = LibraryStatus.OFFLINE.value if error else LibraryStatus.ONLINE.value
+        library.last_error = error
+        if not error:
+            library.last_seen_at = datetime.now(timezone.utc)
+        db.commit()
+        if error:
+            logger.warning("Edge library offline", extra={"library": library.name, "reason": error})
+            return {"created": 0, "updated": 0, "moved": 0, "errors": 0, "cancelled": False, "created_ids": [], "offline_libraries": [library.name], "library": library.name}
+
+        listed = {item.file_path: item for item in items}
+
+        def exists(entry: ArchiveEntry) -> bool:
+            if entry.library_id == library.id:
+                return entry.file_path in listed
+            other = entry.library
+            return Path(entry.file_path).exists() if other is not None and other.edge_id is None else True
+
+        def verify(db: Session, library_id: str) -> dict[str, int]:
+            # The device hashed every file of a library that came back, so the hashes are compared here.
+            stats = {"verified": 0, "missing": 0, "corrupted": 0}
+            for entry in self.repo.list_in_library(db, library_id):
+                item = listed.get(entry.file_path)
+                if item is None:
+                    status = VerificationStatus.MISSING
+                elif item.file_hash is None and entry.archive_type != SUPPORTED_FOLDER_TYPE:
+                    continue
+                elif item.file_hash != entry.file_hash:
+                    status = VerificationStatus.CORRUPTED
+                else:
+                    status = VerificationStatus.VERIFIED
+                entry.verification_status = status
+                entry.last_verified = datetime.now(timezone.utc)
+                stats[status.value.lower()] += 1
+            db.commit()
+            return stats
+
+        self.exists = exists
+        self.hash_files = False
+        stats = self._ingest_batches(db, [(library, items, was_offline)], job_id, on_progress, verify)
+        stats["offline_libraries"] = []
+        stats["library"] = library.name
+        logger.info("Edge report stored", extra={"job_id": job_id, "library": library.name, "archives_created": stats["created"], "archives_moved": stats["moved"]})
         return stats
 
     def check_library(self, db: Session, library: Library) -> bool:
@@ -270,7 +353,7 @@ class ScannerService:
         # Entries whose file is gone become MISSING; ones that came back are verified again later.
         missing = 0
         for entry in self.repo.list_in_library(db, library.id):
-            exists = Path(entry.file_path).exists()
+            exists = self.exists(entry)
             if not exists and entry.verification_status != VerificationStatus.MISSING:
                 entry.verification_status = VerificationStatus.MISSING
                 missing += 1
@@ -406,7 +489,7 @@ class ScannerService:
         # the entry moved with its library. Folders have no hash, so this is their only move key.
         if library_id and item.relative_path:
             candidate = self.repo.get_by_relative_path(db, library_id, item.relative_path)
-            if candidate is not None and not Path(candidate.file_path).exists():
+            if candidate is not None and not self.exists(candidate):
                 self.repo.update(db, candidate, {
                     "file_path": item.file_path,
                     "file_size": item.file_size,
@@ -420,7 +503,7 @@ class ScannerService:
             for candidate in self.repo.get_all_by_hash(db, item.file_hash):
                 # Same content at a new path while the old path is gone means the archive was moved;
                 # if the old file still exists this is a second copy and gets its own entry.
-                if not Path(candidate.file_path).exists():
+                if not self.exists(candidate):
                     self.repo.update(
                         db,
                         candidate,
@@ -452,7 +535,7 @@ class ScannerService:
         stats["created_ids"].append(archive_entry.id)
 
     def _ensure_file_hash(self, item: ArchiveScanItem, on_chunk: Callable[[int], None] | None = None,) -> None:
-        if item.file_hash is None:
+        if item.file_hash is None and self.hash_files:
             item.file_hash = self._compute_file_hash(
                 Path(item.file_path),
                 on_chunk,

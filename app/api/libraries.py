@@ -5,9 +5,10 @@ from app.core.auth import get_current_active_user, require_permission
 from app.db.session import get_db
 from app.schemas.library import LibraryCreate, LibraryRead, LibraryUpdate
 from app.services.audit import AuditService
+from app.services.job import JobService
 from app.services.library import LibraryService
 from app.utils.audit_actions import AuditAction
-from app.utils.enums import PermissionName
+from app.utils.enums import JobType, PermissionName
 
 router = APIRouter(prefix="/libraries", tags=["libraries"])
 service = LibraryService()
@@ -71,6 +72,9 @@ def create_library(
             user_id=current_user.id,
             details=f"Created library '{library.name}'",
         )
+        if library.edge_id:
+            # Only the device can see the folder; its first scan checks the path and learns the drive.
+            JobService().queue_edge_scan(db, current_user, JobType.INCREMENTAL_SCAN, library)
         return library
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
@@ -92,6 +96,7 @@ def update_library(
     library = service.get(db, library_id)
     if library is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Library not found")
+    moved_to_edge = "edge_id" in data.model_fields_set and data.edge_id is not None and data.edge_id != library.edge_id
     try:
         updated = service.update(db, library, data)
         audit_log_service.log(
@@ -102,6 +107,8 @@ def update_library(
             user_id=current_user.id,
             details=f"Updated library '{updated.name}'",
         )
+        if moved_to_edge:
+            JobService().queue_edge_scan(db, current_user, JobType.INCREMENTAL_SCAN, updated)
         return updated
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc

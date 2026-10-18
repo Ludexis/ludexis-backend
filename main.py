@@ -6,6 +6,7 @@ from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 from prometheus_fastapi_instrumentator import Instrumentator
 
+from app import __version__
 from app.api import api_router
 
 from app.core.access import media_visible
@@ -31,7 +32,7 @@ async def lifespan(_: FastAPI):
 app = FastAPI(
     lifespan=lifespan,
     title="Ludexis Backend",
-    version="1.1.0",
+    version=__version__,
     description="Self-hosted game archive metadata catalog backend built with FastAPI.",
 )
 

@@ -23,5 +23,7 @@ class LibraryRepository(BaseRepository[Library]):
     def get_by_name(self, db: Session, name: str) -> Library | None:
         return db.query(Library).filter(Library.name == name, Library.deleted_at.is_(None)).one_or_none()
 
-    def get_by_path(self, db: Session, path: str) -> Library | None:
-        return db.query(Library).filter(Library.path == path, Library.deleted_at.is_(None)).one_or_none()
+    def get_by_path(self, db: Session, path: str, edge_id: str | None = None) -> Library | None:
+        # Paths are per machine: the same folder name can exist on the server and on each edge device.
+        location = Library.edge_id.is_(None) if edge_id is None else Library.edge_id == edge_id
+        return db.query(Library).filter(Library.path == path, location, Library.deleted_at.is_(None)).one_or_none()

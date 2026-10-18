@@ -3,6 +3,7 @@ from app.models.archive_entry import ArchiveEntry  # noqa: F401
 from app.models.audit_log import AuditLog  # noqa: F401
 from app.models.collection import Collection  # noqa: F401
 from app.models.developer import Developer  # noqa: F401
+from app.models.edge_device import EdgeDevice  # noqa: F401
 from app.models.franchise import Franchise  # noqa: F401
 from app.models.genre import Genre  # noqa: F401
 from app.models.job_history import JobHistory  # noqa: F401

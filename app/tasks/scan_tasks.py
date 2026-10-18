@@ -17,6 +17,9 @@ def _queue_enrichment(db: Session, scan_job_id: str, stats: dict) -> dict:
     from app.services.job import JobService
 
     scan_job = JobHistoryRepository().get(db, scan_job_id)
+    if scan_job is not None and scan_job.edge is not None and scan_job.edge.match_metadata:
+        # That device looks the new entries up itself at its next check-ins.
+        return stats
     enrichment_job = JobService().start_job(
         db,
         scan_job.user if scan_job else None,
@@ -57,6 +60,18 @@ def scan_incremental_task(self, job_history_id: str, library_id: str | None = No
         lambda db, report, job_id: _queue_enrichment(
             db, job_id, ScannerService().scan_incremental(db, job_id=job_id, on_progress=report, library_id=library_id)
         ),
+    )
+
+
+@celery_app.task(**JOB_TASK_OPTIONS)
+def ingest_edge_report_task(self, job_history_id: str) -> str:
+    from app.services.edge import EdgeService
+
+    return run_job(
+        self,
+        job_history_id,
+        "Edge scan",
+        lambda db, report, job_id: _queue_enrichment(db, job_id, EdgeService().ingest(db, job_id, on_progress=report)),
     )
 
 
