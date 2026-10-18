@@ -76,8 +76,8 @@ Settings are read from the environment or `.env` (see [`.env.example`](.env.exam
 
 | Variable | Purpose |
 | -------- | ------- |
-| `DATABASE_URL` | PostgreSQL connection (`postgresql+psycopg://...`) |
-| `REDIS_URL`, `CELERY_BROKER_URL`, `CELERY_RESULT_BACKEND` | Redis for the job queue and results |
+| `DATABASE_URL` | PostgreSQL connection (`postgresql+psycopg://...`). Left unset, it is built from `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB`, `POSTGRES_HOST` (default `db`) and `POSTGRES_PORT` |
+| `REDIS_URL`, `CELERY_BROKER_URL`, `CELERY_RESULT_BACKEND` | Redis for the job queue and results (default `redis://redis:6379/0`; the Celery URLs default to `REDIS_URL`) |
 | `JWT_SECRET_KEY` | Token signing secret. Left empty, one is generated into `CONFIG_DIR` |
 | `CONFIG_DIR` | Where the generated secret is kept |
 | `ACCESS_TOKEN_EXPIRE_MINUTES`, `REFRESH_TOKEN_EXPIRE_DAYS` | Session lifetimes |
@@ -101,9 +101,11 @@ app/
   repositories/   database queries
   services/       business logic: scanning, metadata, artwork, grouping, jobs
   providers/      metadata providers (VNDB, IGDB, Steam, SteamGridDB) and the plugin loader
+  edge/           the edge device process (python -m app.edge) and its install files (bundle/)
   tasks/          Celery app, job runner and task modules
   utils/          shared helpers
 alembic/          database migrations
+bin/ludexis       container entry point: server, worker, beat, edge, health <role>
 scripts/          admin tools: reset_password, seed_demo
 tests/            pytest suite
 main.py           application entry point
@@ -135,7 +137,7 @@ The container runs `alembic upgrade head` before starting the API, so deployment
 docker build -t ludexis-backend .
 ```
 
-Pushes to `main` publish `ghcr.io/ludexis/ludexis-backend:latest` for `linux/amd64` and `linux/arm64`. A `v1.2.3` tag also publishes `:1.2.3` and `:1.2`. The same image runs the API, the worker and the scheduler; only the command differs.
+Pushes to `main` publish `ghcr.io/ludexis/ludexis-backend:latest` for `linux/amd64` and `linux/arm64`. A `v1.2.3` tag also publishes `:1.2.3` and `:1.2`. The same image runs the API, the worker, the scheduler and edge devices; only the command differs: `ludexis server`, `ludexis worker`, `ludexis beat` or `ludexis edge` (`ludexis health <role>` for health checks).
 
 Admin tools run inside the container:
 
