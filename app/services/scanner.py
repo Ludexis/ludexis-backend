@@ -101,6 +101,13 @@ class ScannerService:
             return True
         return False
     
+    def _resized(self, item: ArchiveScanItem, existing: ArchiveEntry | None) -> bool:
+        return existing is None or (item.archive_type != SUPPORTED_FOLDER_TYPE and existing.file_size != item.file_size)
+
+    def _automatic(self, db: Session, job_id: str | None) -> bool:
+        job = db.get(JobHistory, job_id) if job_id else None
+        return job is not None and job.user_id is None
+
     def verify_archives(self, db: Session, library_id: str | None = None,) -> dict[str, int]:
         stats = {
             "verified": 0,
@@ -176,15 +183,31 @@ class ScannerService:
                 for item in items:
                     item.relative_path = self._relative_path(item.file_path, root)
             batches.append((library, items, reconnected))
-        if incremental:
-            existing_entries = {entry.file_path: entry for entry in self.repo.list_all(db)}
-            # A library that just came back online is scanned in full.
+        existing_entries = {entry.file_path: entry for entry in self.repo.list_all(db)}
+        pending: dict[str, int] = {}
+        if self._automatic(db, job_id):
+            # A scan nobody started (a schedule) reads no files: unchanged ones are kept, and new or resized ones are
+            # only counted, for the user to check from the Libraries page.
+            filtered = []
+            for library, items, reconnected in batches:
+                waiting = [item for item in items if self._resized(item, existing_entries.get(item.file_path))]
+                if library is not None:
+                    pending[library.id] = len(waiting)
+                filtered.append((library, [item for item in items if not self._needs_processing(item, existing_entries)], reconnected))
+            batches = filtered
+        elif incremental:
+            # A library that just came back online is relinked in full; only new or changed files are hashed.
             batches = [
                 (library, items if reconnected else [item for item in items if self._needs_processing(item, existing_entries)], reconnected)
                 for library, items, reconnected in batches
             ]
 
-        stats = self._ingest_batches(db, batches, job_id, on_progress, self.verify_archives)
+        stats = self._ingest_batches(db, batches, job_id, on_progress)
+        for library, _, _ in batches:
+            if library is not None:
+                library.pending_changes = pending.get(library.id, 0)
+        db.commit()
+        stats["pending"] = sum(pending.values())
         stats["offline_libraries"] = offline
         if library_id:
             stats["library"] = next((library.name for library, _, _ in batches), None) or ", ".join(offline)
@@ -202,8 +225,8 @@ class ScannerService:
         )
         return stats
 
-    def _ingest_batches(self, db: Session, batches: list, job_id: str | None, on_progress: ProgressCallback | None, verify: Callable[[Session, str], dict],) -> dict:
-        """Stores (library, items, reconnected) batches; verify(db, library_id) checks a library that came back."""
+    def _ingest_batches(self, db: Session, batches: list, job_id: str | None, on_progress: ProgressCallback | None,) -> dict:
+        """Stores (library, items, reconnected) batches."""
         stats = {
             "created": 0,
             "updated": 0,
@@ -242,11 +265,7 @@ class ScannerService:
                 stats["missing"] += self._mark_availability(db, library)
                 library.last_scan_at = datetime.now(timezone.utc)
         db.commit()
-        # A drive that was away may have come back with changed files, so its entries are checked right away.
-        for library, _, reconnected in batches:
-            if reconnected:
-                for outcome, count in verify(db, library.id).items():
-                    stats[f"reconnect_{outcome}"] = stats.get(f"reconnect_{outcome}", 0) + count
+        # A drive that comes back is not hashed again in full; the weekly integrity check covers its contents.
         stats.update(GroupingService().regroup(db))
         return stats
 
@@ -303,8 +322,7 @@ class ScannerService:
 
         self.exists = exists
         self.hash_files = False
-        # A drive that comes back is not hashed again in full; size changes show up as pending files instead.
-        stats = self._ingest_batches(db, [(library, items, was_offline)], job_id, on_progress, lambda db, library_id: {})
+        stats = self._ingest_batches(db, [(library, items, was_offline)], job_id, on_progress)
         library.pending_changes = len(pending)
         db.commit()
         stats["pending"] = library.pending_changes

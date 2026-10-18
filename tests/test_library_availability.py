@@ -4,9 +4,10 @@ import uuid
 import pytest
 
 from app.models.archive_entry import ArchiveEntry
+from app.models.job_history import JobHistory
 from app.models.library import Library
 from app.services.scanner import ScannerService
-from app.utils.enums import VerificationStatus
+from app.utils.enums import JobStatus, JobType, VerificationStatus
 from tests.test_db import TestingSessionLocal
 
 
@@ -67,9 +68,9 @@ def test_missing_library_goes_offline_and_keeps_entries(db, tmp_path):
     assert library.status == "ONLINE"
     assert library.name in stats["reconnected_libraries"]
     assert len(entries_of(db, library)) == 2
-    # The returning library is verified at once, not at the next weekly integrity check.
-    assert stats["reconnect_missing"] == 0
-    assert stats["reconnect_verified"] + stats["reconnect_corrupted"] == 2
+    # The returning library is not hashed again in full; its entries keep their state.
+    assert "reconnect_verified" not in stats
+    assert {entry.verification_status for entry in entries_of(db, library)} == {VerificationStatus.VERIFIED}
 
 
 def test_empty_root_with_entries_is_offline(db, tmp_path):
@@ -136,3 +137,33 @@ def test_a_library_can_be_scanned_on_its_own(db, tmp_path):
     assert stats["library"] == picked_library.name
     assert len(entries_of(db, picked_library)) == 2
     assert entries_of(db, other_library) == []
+
+
+def test_a_scheduled_scan_reads_no_files_and_counts_new_or_resized_ones(db, tmp_path, monkeypatch):
+    root = tmp_path / "games"
+    populate(root)
+    library = make_library(db, root)
+    ScannerService().scan_full(db)
+    (root / "Gamma Story v1.0.zip").write_bytes(b"new")
+    (root / "Alpha Story v1.0.zip").write_bytes(b"resized and longer than before")
+    job = JobHistory(job_type=JobType.INCREMENTAL_SCAN, status=JobStatus.RUNNING, progress=0)
+    db.add(job)
+    db.commit()
+    hashed = []
+    original = ScannerService._compute_file_hash
+    monkeypatch.setattr(ScannerService, "_compute_file_hash", lambda self, path, on_chunk=None: hashed.append(path.name) or original(self, path, on_chunk))
+
+    stats = ScannerService().scan_incremental(db, job_id=job.id)
+    db.refresh(library)
+
+    assert hashed == []
+    assert stats["created"] == 0
+    assert library.pending_changes == 2
+    assert len(entries_of(db, library)) == 2
+
+    # A scan someone starts stores them and clears the count.
+    ScannerService().scan_incremental(db)
+    db.refresh(library)
+    assert sorted(hashed) == ["Alpha Story v1.0.zip", "Gamma Story v1.0.zip"]
+    assert library.pending_changes == 0
+    assert len(entries_of(db, library)) == 3
